@@ -1,7 +1,7 @@
 # ❄️ Multi Air Conditioner Card
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![version](https://img.shields.io/badge/version-1.1-blue)
+![version](https://img.shields.io/badge/version-1.2-blue)
 ![HA](https://img.shields.io/badge/Home%20Assistant-2023.1+-green)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -25,7 +25,7 @@ Card tùy chỉnh cho Home Assistant Lovelace — điều khiển điều hòa n
 
 ---
 
-## ✨ Tính năng (v1.1)
+## ✨ Tính năng (v1.2)
 
 ### 🎨 Hiển thị & Giao diện
 - ❄️ **Đồng hồ nhiệt độ** — vòng cung động hiển thị nhiệt độ phòng hiện tại với ánh sáng đổi màu theo chế độ

@@ -1,8 +1,14 @@
 /**
  * Multi Air Conditioner Card
- * v1.1 Designed by @doanlong1412 from 🇻🇳 Vietnam
+ * v1.2 Designed by @doanlong1412 from 🇻🇳 Vietnam
  * HACS-compatible Web Component
  *
+ * ─── What's new in v1.2 ───────────────────────────────────────────────────────
+ * 🇵🇹 New language — Português (11 languages total)
+ * 🌡️ Dynamic temperature colour on dial — blue (cold) → cyan → green → orange → red (hot)
+ * ⏱️ Timer overhaul — 8 preset durations (30m · 1h · 1.5h · 2h · 3h · 4h · 6h · 8h) + free custom-minute input
+ * 🔢 Room tabs enlarged — always shows 4 rooms, scrollable when more than 4
+ * 🐛 Bug fixes and stability improvements
  * ─── What's new in v1.1 ───────────────────────────────────────────────────────
  *  🌐 10 languages — full editor + card UI translation
  *  🎨 16 background gradient presets (same as Gate Card)
@@ -51,6 +57,15 @@ const AC_TRANSLATIONS = {
       return 'Quá nóng! Hãy điều chỉnh nhiệt độ';
     },
     timerBtn: 'Hẹn giờ',
+    timerTitle: '⏰ Hẹn giờ',
+    timerOff: '⏹ Hẹn tắt', timerOn: '▶ Hẹn bật',
+    timerMinPlaceholder: 'Nhập phút...', timerMinUnit: 'phút',
+    timerDelete: 'Xóa hẹn', timerConfirm: 'Xác nhận',
+    edViewMode: '🖥 Chế độ hiển thị',
+    edViewModeFull: 'Full — Đầy đủ',
+    edViewModeLite: 'Lite — Gọn nhẹ',
+    edPresetBar: '🎛 Thanh tùy chọn (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Hiện dòng Eco · Fav · Clean',
     bgLabel: 'Màu nền gradient', bgPresets: 'Preset',
     colorLabel: 'Màu sắc', accentColor: 'Màu nhấn (accent)', textColor: 'Màu chữ',
     color1: 'Màu 1 (trên trái)', color2: 'Màu 2 (dưới phải)',
@@ -110,7 +125,16 @@ const AC_TRANSLATIONS = {
       return 'Too hot! Adjust the temperature';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Gradient background', bgPresets: 'Preset',
+    bgLabel: 'Gradient background',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Schedule off', timerOn: '▶ Schedule on',
+    timerMinPlaceholder: 'Enter minutes...', timerMinUnit: 'min',
+    timerDelete: 'Delete timer', timerConfirm: 'Confirm',
+    edViewMode: '🖥 Display mode',
+    edViewModeFull: 'Full — Complete view',
+    edViewModeLite: 'Lite — Compact view',
+    edPresetBar: '🎛 Preset bar (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Show Eco · Fav · Clean row', bgPresets: 'Preset',
     colorLabel: 'Colors', accentColor: 'Accent color', textColor: 'Text color',
     color1: 'Color 1 (top left)', color2: 'Color 2 (bottom right)',
     edLang: 'Language',
@@ -169,7 +193,16 @@ const AC_TRANSLATIONS = {
       return 'Zu heiß! Temperatur anpassen';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Verlaufshintergrund', bgPresets: 'Voreinstellung',
+    bgLabel: 'Verlaufshintergrund',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Zeitplan aus', timerOn: '▶ Zeitplan an',
+    timerMinPlaceholder: 'Minuten eingeben...', timerMinUnit: 'Min',
+    timerDelete: 'Timer löschen', timerConfirm: 'Bestätigen',
+    edViewMode: '🖥 Anzeigemodus',
+    edViewModeFull: 'Full — Vollansicht',
+    edViewModeLite: 'Lite — Kompaktansicht',
+    edPresetBar: '🎛 Voreinstellungsleiste (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Eco · Fav · Clean-Zeile anzeigen', bgPresets: 'Voreinstellung',
     colorLabel: 'Farben', accentColor: 'Akzentfarbe', textColor: 'Textfarbe',
     color1: 'Farbe 1 (oben links)', color2: 'Farbe 2 (unten rechts)',
     edLang: 'Sprache',
@@ -228,6 +261,15 @@ const AC_TRANSLATIONS = {
       return 'Trop chaud! Ajustez la température';
     },
     timerBtn: 'Minuterie',
+    timerTitle: '⏰ Minuterie',
+    timerOff: '⏹ Programmer arrêt', timerOn: '▶ Programmer allumage',
+    timerMinPlaceholder: 'Entrer minutes...', timerMinUnit: 'min',
+    timerDelete: 'Supprimer minuterie', timerConfirm: 'Confirmer',
+    edViewMode: '🖥 Mode d\'affichage',
+    edViewModeFull: 'Full — Vue complète',
+    edViewModeLite: 'Lite — Vue compacte',
+    edPresetBar: '🎛 Barre de préréglages (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Afficher la ligne Eco · Fav · Clean',
     bgLabel: 'Dégradé de fond', bgPresets: 'Préréglage',
     colorLabel: 'Couleurs', accentColor: 'Couleur d\'accent', textColor: 'Couleur du texte',
     color1: 'Couleur 1 (haut gauche)', color2: 'Couleur 2 (bas droite)',
@@ -287,7 +329,16 @@ const AC_TRANSLATIONS = {
       return 'Te heet! Temperatuur aanpassen';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Verloopachtergrond', bgPresets: 'Voorinstelling',
+    bgLabel: 'Verloopachtergrond',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Schema uit', timerOn: '▶ Schema aan',
+    timerMinPlaceholder: 'Minuten invoeren...', timerMinUnit: 'min',
+    timerDelete: 'Timer verwijderen', timerConfirm: 'Bevestigen',
+    edViewMode: '🖥 Weergavemodus',
+    edViewModeFull: 'Full — Volledige weergave',
+    edViewModeLite: 'Lite — Compacte weergave',
+    edPresetBar: '🎛 Voorkeuzeknoppenbalk (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Eco · Fav · Clean-rij weergeven', bgPresets: 'Voorinstelling',
     colorLabel: 'Kleuren', accentColor: 'Accentkleur', textColor: 'Tekstkleur',
     color1: 'Kleur 1 (linksboven)', color2: 'Kleur 2 (rechtsonder)',
     edLang: 'Taal',
@@ -346,7 +397,16 @@ const AC_TRANSLATIONS = {
       return 'Zbyt gorąco! Dostosuj temperaturę';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Tło gradientowe', bgPresets: 'Ustawienie wstępne',
+    bgLabel: 'Tło gradientowe',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Zaplanuj wyłączenie', timerOn: '▶ Zaplanuj włączenie',
+    timerMinPlaceholder: 'Wprowadź minuty...', timerMinUnit: 'min',
+    timerDelete: 'Usuń timer', timerConfirm: 'Potwierdź',
+    edViewMode: '🖥 Tryb wyświetlania',
+    edViewModeFull: 'Full — Pełny widok',
+    edViewModeLite: 'Lite — Widok kompaktowy',
+    edPresetBar: '🎛 Pasek presetu (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Pokaż wiersz Eco · Fav · Clean', bgPresets: 'Ustawienie wstępne',
     colorLabel: 'Kolory', accentColor: 'Kolor akcentu', textColor: 'Kolor tekstu',
     color1: 'Kolor 1 (lewy górny)', color2: 'Kolor 2 (prawy dolny)',
     edLang: 'Język',
@@ -405,7 +465,16 @@ const AC_TRANSLATIONS = {
       return 'För varmt! Justera temperaturen';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Gradientbakgrund', bgPresets: 'Förinställning',
+    bgLabel: 'Gradientbakgrund',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Schemalägg av', timerOn: '▶ Schemalägg på',
+    timerMinPlaceholder: 'Ange minuter...', timerMinUnit: 'min',
+    timerDelete: 'Ta bort timer', timerConfirm: 'Bekräfta',
+    edViewMode: '🖥 Visningsläge',
+    edViewModeFull: 'Full — Fullständig vy',
+    edViewModeLite: 'Lite — Kompakt vy',
+    edPresetBar: '🎛 Förinställningsfält (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Visa Eco · Fav · Clean-rad', bgPresets: 'Förinställning',
     colorLabel: 'Färger', accentColor: 'Accentfärg', textColor: 'Textfärg',
     color1: 'Färg 1 (övre vänster)', color2: 'Färg 2 (nedre höger)',
     edLang: 'Språk',
@@ -464,6 +533,15 @@ const AC_TRANSLATIONS = {
       return 'Túl meleg! Állítsa be a hőmérsékletet';
     },
     timerBtn: 'Időzítő',
+    timerTitle: '⏰ Időzítő',
+    timerOff: '⏹ Kikapcsolás ütemezése', timerOn: '▶ Bekapcsolás ütemezése',
+    timerMinPlaceholder: 'Adja meg a perceket...', timerMinUnit: 'perc',
+    timerDelete: 'Időzítő törlése', timerConfirm: 'Megerősítés',
+    edViewMode: '🖥 Megjelenítési mód',
+    edViewModeFull: 'Full — Teljes nézet',
+    edViewModeLite: 'Lite — Kompakt nézet',
+    edPresetBar: '🎛 Beállítássáv (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Eco · Fav · Clean sor megjelenítése',
     bgLabel: 'Gradiens háttér', bgPresets: 'Előbeállítás',
     colorLabel: 'Színek', accentColor: 'Kiemelőszín', textColor: 'Szövegszín',
     color1: 'Szín 1 (bal felső)', color2: 'Szín 2 (jobb alsó)',
@@ -523,6 +601,15 @@ const AC_TRANSLATIONS = {
       return 'Příliš horko! Nastavte teplotu';
     },
     timerBtn: 'Časovač',
+    timerTitle: '⏰ Časovač',
+    timerOff: '⏹ Naplánovat vypnutí', timerOn: '▶ Naplánovat zapnutí',
+    timerMinPlaceholder: 'Zadejte minuty...', timerMinUnit: 'min',
+    timerDelete: 'Smazat časovač', timerConfirm: 'Potvrdit',
+    edViewMode: '🖥 Režim zobrazení',
+    edViewModeFull: 'Full — Úplné zobrazení',
+    edViewModeLite: 'Lite — Kompaktní zobrazení',
+    edPresetBar: '🎛 Panel předvoleb (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Zobrazit řádek Eco · Fav · Clean',
     bgLabel: 'Přechodové pozadí', bgPresets: 'Předvolba',
     colorLabel: 'Barvy', accentColor: 'Barva zvýraznění', textColor: 'Barva textu',
     color1: 'Barva 1 (vlevo nahoře)', color2: 'Barva 2 (vpravo dole)',
@@ -582,7 +669,16 @@ const AC_TRANSLATIONS = {
       return 'Troppo caldo! Regola la temperatura';
     },
     timerBtn: 'Timer',
-    bgLabel: 'Sfondo sfumato', bgPresets: 'Preimpostazione',
+    bgLabel: 'Sfondo sfumato',
+    timerTitle: '⏰ Timer',
+    timerOff: '⏹ Programma spegnimento', timerOn: '▶ Programma accensione',
+    timerMinPlaceholder: 'Inserisci minuti...', timerMinUnit: 'min',
+    timerDelete: 'Elimina timer', timerConfirm: 'Conferma',
+    edViewMode: '🖥 Modalità display',
+    edViewModeFull: 'Full — Vista completa',
+    edViewModeLite: 'Lite — Vista compatta',
+    edPresetBar: '🎛 Barra preset (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Mostra riga Eco · Fav · Clean', bgPresets: 'Preimpostazione',
     colorLabel: 'Colori', accentColor: 'Colore accento', textColor: 'Colore testo',
     color1: 'Colore 1 (in alto a sinistra)', color2: 'Colore 2 (in basso a destra)',
     edLang: 'Lingua',
@@ -602,6 +698,74 @@ const AC_TRANSLATIONS = {
     edHumidity: '💧 Umidità esterna',
     edPower: '⚡ Consumo energetico (kW)',
     rooms: ['Soggiorno','Camera da letto','Sala da pranzo','Ufficio'],
+    roomIcons: ['🛋','🛌','🍳','💼'],
+  },
+  pt: {
+    lang: 'Português', flag: 'pt',
+    cardTitle: 'Ar Condicionado',
+    cardSub:   'Casa Inteligente',
+    greet: function() {
+      var h = new Date().getHours();
+      if (h>=6  && h<11) return 'Bom dia,';
+      if (h>=11 && h<13) return 'Bom dia,';
+      if (h>=13 && h<18) return 'Boa tarde,';
+      if (h>=18 && h<21) return 'Boa noite,';
+      return 'Boa noite,';
+    },
+    tempLabel: 'TEMPERATURA',
+    selectRoom: 'ESCOLHER SALA',
+    statusLabel: 'ESTADO',
+    statusOn: 'A FUNCIONAR', statusOff: 'DESLIGADO',
+    airGood: 'Qualidade do ar boa', pressOn: 'Prima para ligar',
+    dustLabel: 'Pó fino',
+    fanLabel: 'Velocidade do ventilador', swingLabel: 'Direção do fluxo',
+    allOff: 'Desligar todos', allOffSub: 'Desligar todas as salas',
+    tapOff: 'Prima para desligar', tapOn: 'Prima para ligar',
+    confirmOff: '⚠ Desligar todos?', confirmSub: function(n) { return 'Irá desligar ' + n + ' ar condicionados ao mesmo tempo'; },
+    cancel: 'Cancelar', doOff: '⏻ Desligar todos',
+    overlayOn: 'LIGADO', overlayOff: 'DESLIGADO',
+    modes: { cool:'Arrefecer', heat:'Aquecer', dry:'Desumidificar', fan_only:'Ventilador', off:'Desligado' },
+    fans:   ['Auto','Baixo','Médio','Alto'],
+    swings: ['Fixo','Cima/Baixo','Esquerda/Direita','Todos'],
+    comfort: { dry:'Ar seco e confortável', fan_only:'Brisa leve e fresca', off:'Atualmente desligado' },
+    comfortTemp: function(t) {
+      t = Math.round(t);
+      if (t<=19) return 'Muito frio, vista mais roupa!';
+      if (t<=23) return 'Temperatura ideal, relaxe';
+      if (t<=27) return 'Confortável e agradável';
+      if (t<=31) return 'Um pouco quente, arrefecer mais';
+      return 'Demasiado quente! Ajuste a temperatura';
+    },
+    timerBtn: 'Temporizador',
+    timerTitle: '⏰ Temporizador',
+    timerOff: '⏹ Agendar desligamento', timerOn: '▶ Agendar ligamento',
+    timerMinPlaceholder: 'Inserir minutos...', timerMinUnit: 'min',
+    timerDelete: 'Apagar temporizador', timerConfirm: 'Confirmar',
+    edViewMode: '🖥 Modo de exibição',
+    edViewModeFull: 'Full — Vista completa',
+    edViewModeLite: 'Lite — Vista compacta',
+    edPresetBar: '🎛 Barra de predefinições (Eco / Fav / Clean)',
+    edPresetBarDesc: 'Mostrar linha Eco · Fav · Clean',
+    bgLabel: 'Fundo gradiente', bgPresets: 'Predefinição',
+    colorLabel: 'Cores', accentColor: 'Cor de destaque', textColor: 'Cor do texto',
+    color1: 'Cor 1 (canto superior esquerdo)', color2: 'Cor 2 (canto inferior direito)',
+    edLang: 'Idioma',
+    edEntities: 'Entidades',
+    edOwnerName: '👤 Nome exibido (Casa Inteligente)',
+    edRoomCountLabel: function(n) { return '🏠 Número de salas (1–8, padrão 4)'; },
+    edRoomsHeader: function(n) { return '❄ Ar Condicionados (' + n + ' salas)'; },
+    edRooms: '❄ Ar Condicionados',
+    edSensors: '📡 Sensores ambientais',
+    edColors: 'Cores',
+    edBg: 'Fundo',
+    edAcEntity: '❄ Entidade AC (climate.*)',
+    edAcName: '🏷 Nome exibido',
+    edAcIcon: '🎨 Ícone (emoji)',
+    edPm25: '🌫 Pó fino PM2.5',
+    edOutdoorTemp: '🌡 Temperatura exterior',
+    edHumidity: '💧 Humidade exterior',
+    edPower: '⚡ Consumo de energia (kW)',
+    rooms: ['Sala de estar','Quarto','Sala de jantar','Escritório'],
     roomIcons: ['🛋','🛌','🍳','💼'],
   },
 };
@@ -631,6 +795,28 @@ function acPresetGradient(preset, c1, c2) {
   const gc1 = (preset === 'custom' ? c1 : p.c1) || '#001e2b';
   const gc2 = (preset === 'custom' ? c2 : p.c2) || '#12c6f3';
   return 'linear-gradient(135deg, ' + gc1 + 'bb 0%, ' + gc2 + '44 100%)';
+}
+
+// ─── Temperature color: 10°C=blue → 22°C=cyan → 26°C=green → 30°C=orange → 35°C=red ──
+function acTempColor(temp) {
+  var t = Math.max(10, Math.min(35, temp));
+  var stops = [
+    { t: 10,  r: 59,  g: 130, b: 246 }, // blue
+    { t: 18,  r: 34,  g: 211, b: 238 }, // cyan
+    { t: 24,  r: 52,  g: 211, b: 153 }, // green
+    { t: 28,  r: 251, g: 191, b: 36  }, // amber
+    { t: 31,  r: 249, g: 115, b: 22  }, // orange
+    { t: 35,  r: 239, g: 68,  b: 68  }, // red
+  ];
+  var lo = stops[0], hi = stops[stops.length - 1];
+  for (var i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].t && t <= stops[i+1].t) { lo = stops[i]; hi = stops[i+1]; break; }
+  }
+  var f = lo.t === hi.t ? 0 : (t - lo.t) / (hi.t - lo.t);
+  var r = Math.round(lo.r + (hi.r - lo.r) * f);
+  var g = Math.round(lo.g + (hi.g - lo.g) * f);
+  var b = Math.round(lo.b + (hi.b - lo.b) * f);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 
 const AC_DEFAULT_CONFIG = {
@@ -738,13 +924,14 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .eco-off{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09)!important;color:rgba(255,255,255,0.55)}
 .eco-badge:hover{filter:brightness(1.25);transform:scale(1.04)}
 .dial-wrap{display:flex;justify-content:center;position:relative;margin:-2px 0 -14px}
-.dial-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-38%);
-  display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;width:144px;height:144px}
+.dial-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-26%);
+  display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;width:150px;height:150px}
 .dial-lbl{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.55);font-weight:500}
-.dial-temp{font-family:'Orbitron',sans-serif;font-size:60px;font-weight:800;color:#ffffff;line-height:1;
-  text-shadow:0 0 30px var(--glow),0 0 60px var(--glow)}
+.dial-temp{font-family:'Orbitron',sans-serif;font-size:44px;font-weight:800;color:#ffffff;line-height:1;
+  text-shadow:0 0 30px var(--glow),0 0 60px var(--glow);transition:color 0.6s ease}
 .dial-deg{font-size:24px;font-weight:400;vertical-align:super;line-height:0}
-.dial-feel{font-size:10px;color:rgba(255,255,255,0.6);margin-top:5px;font-weight:300;text-align:center}
+.dial-feel{font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px;font-weight:300;text-align:center;
+  max-width:130px;line-height:1.45;word-break:break-word;white-space:normal}
 .temp-ctrl{display:flex;align-items:center;justify-content:center}
 .temp-btn{width:40px;height:40px;border-radius:50%;background:rgba(0,20,50,0.25);
   border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.9);font-size:24px;
@@ -818,7 +1005,26 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
   border-radius:10px;padding:9px;font-size:10px;font-weight:700;font-family:'Sora',sans-serif;
   color:#ff6b6b;cursor:pointer;outline:none;touch-action:manipulation}
 .pw-arrow{color:rgba(255,255,255,0.4);font-size:20px}
-.right{flex:1;background:linear-gradient(160deg,rgba(160,220,240,0.10) 0%,rgba(100,180,210,0.08) 100%);display:flex;flex-direction:column;position:relative;overflow-x:hidden;overflow-y:visible;min-height:0}
+.right{flex:1.2;background:linear-gradient(160deg,rgba(160,220,240,0.10) 0%,rgba(100,180,210,0.08) 100%);display:flex;flex-direction:column;position:relative;overflow-x:hidden;overflow-y:visible;min-height:0}
+.right--lite{flex:0 0 45%;min-width:0;max-width:none}
+.left--lite{flex:0 0 55%}
+.lite-bottom{display:flex;flex-direction:column;gap:6px;padding:8px 8px 10px;margin-top:8px}
+.power-row--lite{padding:7px 8px;border-radius:12px;gap:7px}
+.power-row--lite .pw-btn{width:32px;height:32px;font-size:16px}
+.power-row--lite .pw-sub--big{font-size:11px}
+.lite-bottom-row{display:flex;gap:6px}
+.lite-small-btn{flex:1;border-radius:12px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:rgba(0,20,50,0.28);border:1px solid rgba(255,255,255,0.22);cursor:pointer;outline:none;font-family:'Sora',sans-serif;min-width:0}
+.lite-small-btn:hover{background:rgba(0,30,70,0.45)}
+.lite-small-btn:active{transform:scale(0.96)}
+.lite-small-btn .lsb-ico{font-size:16px;line-height:1}
+.lite-small-btn .lsb-lbl{font-size:9px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:0.3px;text-align:center;white-space:nowrap}
+.lite-small-btn .lsb-cd{font-family:'Orbitron',sans-serif;font-size:8px;color:rgba(251,191,36,0.9);min-height:10px}
+.lite-small-btn--timer-active{border-color:rgba(251,191,36,0.75)!important;background:rgba(251,191,36,0.12)!important;box-shadow:0 0 12px rgba(251,191,36,0.2)}
+.lite-small-btn--alloff{border-color:rgba(255,80,80,0.25)!important}
+.lite-small-btn--alloff:hover{background:rgba(255,60,60,0.12)!important;border-color:rgba(255,80,80,0.45)!important}
+.lite-small-btn--alloff .lsb-ico{color:rgba(255,150,150,0.85)}
+.lite-small-btn--alloff .lsb-lbl{color:rgba(255,150,150,0.75)}
 .room-image{flex:0 0 185px;position:relative;overflow:hidden}
 .room-img-el{width:100%;height:100%;object-fit:cover;transition:opacity 0.6s ease,transform 0.8s ease;display:block}
 .room-img-el.fade-out{opacity:0;transform:scale(1.04)}
@@ -1146,6 +1352,7 @@ class AcControllerCardV2 extends HTMLElement {
     var fanMode  = this._a(room.id,'fan_mode')     || 'auto';
     var swingMode= this._a(room.id,'swing_mode')   || 'off';
     var ecoOn   = this._a(room.id,'preset_mode') === 'eco';
+    var isLite  = this._config.view_mode === 'lite';
     var fi  = Math.max(0, FAN_LEVELS.indexOf(fanMode));
     var si  = Math.max(0, SWING_LEVELS.indexOf(swingMode));
     var mode    = MODE_CFG[hvac] || MODE_CFG.cool;
@@ -1323,7 +1530,7 @@ class AcControllerCardV2 extends HTMLElement {
 
     // ── Không có <link>/<style> ở đây – đã inject ở connectedCallback
     var html = '<div class="card" style="--accent:' + mode.color + ';--glow:' + mode.glow + ';background:' + bgGrad + '">'
-+ '<div class="left">'
++ '<div class="left' + (isLite ? ' left--lite' : '') + '">'
 
 + '<div class="hdr">'
 + '  <div class="hdr-brand">'
@@ -1368,7 +1575,7 @@ class AcControllerCardV2 extends HTMLElement {
 + '</svg>'
 + '<div class="dial-center">'
 + '  <div class="dial-lbl">' + tr.tempLabel + '</div>'
-+ '  <div class="dial-temp">' + Math.round(curTemp) + '<span class="dial-deg">&#176;</span></div>'
++ '  <div class="dial-temp" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 30px ' + acTempColor(curTemp) + ',0 0 60px ' + acTempColor(curTemp) + '">' + Math.round(curTemp) + '<span class="dial-deg">&#176;</span></div>'
 + '  <div class="dial-feel">' + comfortTxt + '</div>'
 + '</div>'
 + '</div>'
@@ -1395,13 +1602,16 @@ class AcControllerCardV2 extends HTMLElement {
 + '  </div>'
 + '</div>'
 
-+ '<div class="chips">'
++ (!isLite && this._config.show_preset_bar !== false ? (
+  '<div class="chips">'
 + '  <button id="btn-eco-chip" class="chip ' + (ecoOn ? 'chip--g' : '') + '">&#127807; Eco</button>'
 + '  <button class="chip chip--a">&#11088; Fav</button>'
 + '  <button class="chip chip--b">&#10024; Clean</button>'
 + '</div>'
+) : '')
 
-+ '<div class="bottom-row">'
++ (isLite ? '' : (
+  '<div class="bottom-row">'
 + '<button class="power-row" id="btn-power">'
 + '  <div class="pw-btn ' + pwClass + '">&#9211;</div>'
 + '  <div style="flex:1;min-width:0">'
@@ -1409,27 +1619,30 @@ class AcControllerCardV2 extends HTMLElement {
 + '  </div>'
 + '  <span class="pw-arrow">&#8250;</span>'
 + '</button>'
-+ '<button class="timer-btn' + (this._timers[this._activeIdx] ? ' timer-btn--active' : '') + '" id="btn-timer">'
++ '<button class="timer-btn' + (this._timers[this._activeIdx] ? ' timer-btn--active' : '') + '" id="btn-timer-left">'
 + '  <span class="timer-ico">&#9200;</span>'
 + '  <span class="timer-lbl">' + tr.timerBtn + '</span>'
 + '  <span class="timer-cd" id="timer-cd">' + (this._timers[this._activeIdx] ? this._fmtRemain(this._activeIdx) : '') + '</span>'
 + '</button>'
 + '</div>'
+))
 
 + '</div>'  // end .left
 
-+ '<div class="right">'
++ '<div class="right' + (isLite ? ' right--lite' : '') + '">'
 
-+ '<div class="room-image">'
++ (isLite ? '' : (
+  '<div class="room-image">'
 + '  <img id="room-photo" class="room-img-el" src="' + ROOM_IMAGES[this._activeIdx] + '" alt="room">'
 + '  <div class="ac-overlay">'
 + '    <span class="ac-led ' + (isOn ? 'led-on' : 'led-off') + '"></span>'
 + '    <span class="ac-overlay-txt">' + (isOn ? tr.overlayOn : tr.overlayOff) + '</span>'
 + modeChip
 + '  </div>'
-+ '  <div class="img-temp-badge">' + Math.round(curTemp) + '<span>&#176;C</span></div>'
++ '  <div class="img-temp-badge" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 18px ' + acTempColor(curTemp) + ',0 0 40px ' + acTempColor(curTemp) + ',0 2px 20px rgba(0,0,0,0.7)">' + Math.round(curTemp) + '<span>&#176;C</span></div>'
 + '  <div class="img-room-name">' + room.label + '</div>'
 + '</div>'
+))
 
 + '<div class="status-block">'
 + '  <div class="status-header">'
@@ -1449,7 +1662,27 @@ class AcControllerCardV2 extends HTMLElement {
 
 + '<div class="room-tabs"><div class="rt-header">' + tr.selectRoom + '</div><div class="room-tabs-inner' + (ROOMS.length >= 5 ? ' scrollable' : '') + '">' + roomTabs + '</div></div>'
 
-+ '<button class="all-off-btn" id="btn-all-off">'
++ (isLite ? (
+  '<div class="lite-bottom">'
++ '<button class="power-row power-row--lite" id="btn-power-lite">'
++ '  <div class="pw-btn ' + pwClass + '">&#9211;</div>'
++ '  <div style="flex:1;min-width:0"><div class="pw-sub pw-sub--big">' + pwSub + '</div></div>'
++ '  <span class="pw-arrow">&#8250;</span>'
++ '</button>'
++ '<div class="lite-bottom-row">'
++ '<button class="lite-small-btn lite-small-btn--alloff" id="btn-all-off-lite">'
++ '  <span class="lsb-ico">&#9211;</span>'
++ '  <span class="lsb-lbl">' + tr.allOff + '</span>'
++ '</button>'
++ '<button class="lite-small-btn' + (this._timers[this._activeIdx] ? ' lite-small-btn--timer-active' : '') + '" id="btn-timer">'
++ '  <span class="lsb-ico">&#9200;</span>'
++ '  <span class="lsb-lbl">' + tr.timerBtn + '</span>'
++ '  <span class="lsb-cd" id="timer-cd">' + (this._timers[this._activeIdx] ? this._fmtRemain(this._activeIdx) : '') + '</span>'
++ '</button>'
++ '</div>'
++ '</div>'
+) : (
+  '<button class="all-off-btn" id="btn-all-off">'
 + '  <div class="all-off-ico">&#9211;</div>'
 + '  <div class="all-off-info">'
 + '    <div class="all-off-title">' + tr.allOff + '</div>'
@@ -1457,6 +1690,7 @@ class AcControllerCardV2 extends HTMLElement {
 + '  </div>'
 + '  <div class="all-off-arr">&#8250;</div>'
 + '</button>'
+))
 
 + '</div>'  // end .right
 + '</div>'; // end .card
@@ -1552,6 +1786,56 @@ class AcControllerCardV2 extends HTMLElement {
       var next = SWING_LEVELS[(idx + 1) % SWING_LEVELS.length];
       self._call('climate','set_swing_mode',{entity_id:id, swing_mode:next});
     });
+
+    // btn-power-lite (lite mode) — same action as btn-power
+    onTap(r.getElementById('btn-power-lite'), function() {
+      var id = ROOMS[self._activeIdx].id;
+      var isOn2 = self._hass && self._hass.states[id] && self._hass.states[id].state !== 'off';
+      self._call('climate','set_hvac_mode',{entity_id:id, hvac_mode: isOn2 ? 'off' : 'cool'});
+    });
+
+    // all-off lite (same logic, different element id)
+    var allOffLiteHandler = function() {
+      var sr2 = self.shadowRoot;
+      var allOffBtn = r.getElementById('btn-all-off-lite') || r.getElementById('btn-all-off');
+      var oldP = sr2.getElementById('confirm-popup-el');
+      if (oldP) { oldP.remove(); return; }
+      var cpop = document.createElement('div');
+      cpop.id = 'confirm-popup-el';
+      cpop.className = 'confirm-popup';
+      var rect2 = allOffBtn.getBoundingClientRect();
+      cpop.style.bottom = (window.innerHeight - rect2.top + 10) + 'px';
+      cpop.style.right  = (window.innerWidth  - rect2.right + 12) + 'px';
+      var trPop = AC_TRANSLATIONS[(self._config && self._config.language) || 'vi'] || AC_TRANSLATIONS.vi;
+      cpop.innerHTML =
+        '<div class="cp-title">' + trPop.confirmOff + '</div>'
+        + '<div class="cp-sub">' + trPop.confirmSub(ROOMS.length) + '</div>'
+        + '<div class="cp-acts">'
+        + '<button class="cp-cancel" id="cp-cancel-btn">' + trPop.cancel + '</button>'
+        + '<button class="cp-ok" id="cp-ok-btn">' + trPop.doOff + '</button>'
+        + '</div>';
+      sr2.appendChild(cpop);
+      cpop.querySelector('#cp-cancel-btn').onclick = function(ev) { ev.stopPropagation(); cpop.remove(); };
+      cpop.querySelector('#cp-ok-btn').onclick = function(ev) {
+        ev.stopPropagation();
+        ROOMS.forEach(function(room) { self._call('climate','set_hvac_mode',{entity_id:room.id, hvac_mode:'off'}); });
+        cpop.remove();
+      };
+      self._confirmJustOpened = true;
+      setTimeout(function() { self._confirmJustOpened = false; }, 80);
+      function outsideConfirmLite(ev) {
+        if (self._confirmJustOpened) return;
+        var path = ev.composedPath ? ev.composedPath() : [];
+        if (path.indexOf(cpop) === -1 && path.indexOf(allOffBtn) === -1) {
+          cpop.remove();
+          document.removeEventListener('click',    outsideConfirmLite, true);
+          document.removeEventListener('touchend', outsideConfirmLite, true);
+        }
+      }
+      document.addEventListener('click',    outsideConfirmLite, true);
+      document.addEventListener('touchend', outsideConfirmLite, true);
+    };
+    onTap(r.getElementById('btn-all-off-lite'), allOffLiteHandler);
 
     onTap(r.getElementById('btn-all-off'), function() {
       var sr2 = self.shadowRoot;
@@ -1694,6 +1978,9 @@ class AcControllerCardV2 extends HTMLElement {
     var roomIdx = this._activeIdx; // ghi nhớ phòng tại thời điểm bind
     if (!btn) return;
 
+    var lang = (this._config && this._config.language) || 'vi';
+    var tr   = AC_TRANSLATIONS[lang] || AC_TRANSLATIONS['vi'];
+
     var HOURS     = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
     var HOUR_LBLS = ['30p','1h','1.5h','2h','3h','4h','6h','8h'];
 
@@ -1725,10 +2012,10 @@ class AcControllerCardV2 extends HTMLElement {
       function renderPop() {
         var hasTimer = !!(self._timers[roomIdx] && self._timers[roomIdx].end);
         pop.innerHTML =
-          '<div class="tp-title">&#9200; H&#7865;n gi&#7901;</div>'
+          '<div class="tp-title">' + tr.timerTitle + '</div>'
         + '<div class="tp-tabs">'
-        +   '<button class="tp-tab ' + (chosenMode==='off'?'tp-tab-off-sel':'') + '" id="tp-off">&#9209; H&#7865;n t&#7855;t</button>'
-        +   '<button class="tp-tab ' + (chosenMode==='on'?'tp-tab-on-sel':'')   + '" id="tp-on" >&#9654; H&#7865;n b&#7853;t</button>'
+        +   '<button class="tp-tab ' + (chosenMode==='off'?'tp-tab-off-sel':'') + '" id="tp-off">' + tr.timerOff + '</button>'
+        +   '<button class="tp-tab ' + (chosenMode==='on'?'tp-tab-on-sel':'')   + '" id="tp-on" >' + tr.timerOn  + '</button>'
         + '</div>'
         + '<div class="tp-hours">'
         + HOURS.map(function(h, i) {
@@ -1736,17 +2023,16 @@ class AcControllerCardV2 extends HTMLElement {
             return '<button class="tp-h' + sel + '" data-h="' + h + '">' + HOUR_LBLS[i] + '</button>';
           }).join('')
         + '</div>'
-        // Dòng nhập số phút tùy chỉnh
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'
-        +   '<input id="tp-custom-min" type="number" min="1" max="999" placeholder="Nhập phút..." value="' + customMin + '"'
+        +   '<input id="tp-custom-min" type="number" min="1" max="999" placeholder="' + tr.timerMinPlaceholder + '" value="' + customMin + '"'
         +     ' style="flex:1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:8px;'
         +     'padding:6px 8px;font-size:11px;font-family:Sora,sans-serif;color:#fff;outline:none;width:0">'
-        +   '<span style="font-size:9px;color:rgba(255,255,255,0.45);white-space:nowrap">ph&#250;t</span>'
+        +   '<span style="font-size:9px;color:rgba(255,255,255,0.45);white-space:nowrap">' + tr.timerMinUnit + '</span>'
         + '</div>'
         + '<div class="tp-acts">'
-        +   '<button class="tp-cancel" id="tp-cancel">Hu&#7927;</button>'
-        +   (hasTimer ? '<button class="tp-del" id="tp-del">X&#243;a h&#7865;n</button>' : '')
-        +   '<button class="tp-ok ' + (chosenMode==='on'?'tp-ok-on':'tp-ok-off') + '" id="tp-ok">X&#225;c nh&#7853;n</button>'
+        +   '<button class="tp-cancel" id="tp-cancel">' + tr.cancel + '</button>'
+        +   (hasTimer ? '<button class="tp-del" id="tp-del">' + tr.timerDelete + '</button>' : '')
+        +   '<button class="tp-ok ' + (chosenMode==='on'?'tp-ok-on':'tp-ok-off') + '" id="tp-ok">' + tr.timerConfirm + '</button>'
         + '</div>';
 
         // Bind tabs
@@ -2071,7 +2357,7 @@ class MultiAcCardEditor extends HTMLElement {
 </style>
 <div class="editor">
   <div class="credit">❄️ <strong>Multi Air Conditioner Card</strong>
-    <span style="color:var(--secondary-text-color);font-weight:400;">v1.1 Designed by @doanlong1412 from 🇻🇳 Vietnam</span>
+    <span style="color:var(--secondary-text-color);font-weight:400;">v1.2 Designed by @doanlong1412 from 🇻🇳 Vietnam</span>
   </div>
 
   <!-- 0. Owner name -->
@@ -2098,6 +2384,48 @@ class MultiAcCardEditor extends HTMLElement {
             ${tr.lang}
           </div>`).join('')}
       </div>
+    </div>
+  </div>
+
+  <!-- 1b. View mode toggle -->
+  <div class="acc-wrap">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;">
+      <ha-icon icon="mdi:view-split-vertical" style="color:var(--secondary-text-color);--mdi-icon-size:18px;"></ha-icon>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:var(--primary-text-color);">${t.edViewMode}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button id="vm-full" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;outline:none;font-family:inherit;transition:all 0.15s;
+          border:1px solid ${(this._config.view_mode||'full')==='full' ? 'var(--primary-color)' : 'var(--divider-color)'};
+          background:${(this._config.view_mode||'full')==='full' ? 'var(--primary-color)' : 'transparent'};
+          color:${(this._config.view_mode||'full')==='full' ? '#fff' : 'var(--secondary-text-color)'};">${t.edViewModeFull}</button>
+        <button id="vm-lite" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;outline:none;font-family:inherit;transition:all 0.15s;
+          border:1px solid ${(this._config.view_mode)==='lite' ? 'var(--primary-color)' : 'var(--divider-color)'};
+          background:${(this._config.view_mode)==='lite' ? 'var(--primary-color)' : 'transparent'};
+          color:${(this._config.view_mode)==='lite' ? '#fff' : 'var(--secondary-text-color)'};">${t.edViewModeLite}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1c. Preset bar toggle -->
+  <div class="acc-wrap">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;">
+      <ha-icon icon="mdi:view-dashboard-outline" style="color:var(--secondary-text-color);--mdi-icon-size:18px;"></ha-icon>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:var(--primary-text-color);">${t.edPresetBar}</div>
+        <div style="font-size:11px;color:var(--secondary-text-color);margin-top:2px;">${t.edPresetBarDesc}</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0;margin:0;">
+        <input type="checkbox" id="tog-preset-bar" ${this._config.show_preset_bar !== false ? 'checked' : ''}
+          style="opacity:0;width:0;height:0;position:absolute;">
+        <span id="tog-preset-bar-track" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+          background:${this._config.show_preset_bar !== false ? 'var(--primary-color,#03a9f4)' : 'rgba(0,0,0,0.2)'};
+          border-radius:20px;transition:background 0.2s;border:1px solid var(--divider-color);">
+          <span style="position:absolute;height:14px;width:14px;border-radius:50%;background:#fff;
+            top:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);
+            left:${this._config.show_preset_bar !== false ? '19px' : '2px'};"></span>
+        </span>
+      </label>
     </div>
   </div>
 
@@ -2147,7 +2475,7 @@ class MultiAcCardEditor extends HTMLElement {
     </div>
   </div>
 
-  <!-- 4. Background -->
+  <!-- 5. Background -->
   <div class="acc-wrap">
     <div class="acc-head" id="head-bg">
       <ha-icon icon="mdi:palette"></ha-icon> ${t.edBg}
@@ -2333,6 +2661,28 @@ class MultiAcCardEditor extends HTMLElement {
         this._config = c;
         this._fire();
       }));
+
+    // preset bar toggle
+    const togPreset = sr.getElementById('tog-preset-bar');
+    if (togPreset) {
+      togPreset.addEventListener('change', () => {
+        this._config = { ...this._config, show_preset_bar: togPreset.checked };
+        this._fire();
+        this._render();
+      });
+    }
+
+    // view mode toggle
+    const vmFull = sr.getElementById('vm-full');
+    const vmLite = sr.getElementById('vm-lite');
+    if (vmFull) vmFull.addEventListener('click', () => {
+      this._config = { ...this._config, view_mode: 'full' };
+      this._fire(); this._render();
+    });
+    if (vmLite) vmLite.addEventListener('click', () => {
+      this._config = { ...this._config, view_mode: 'lite' };
+      this._fire(); this._render();
+    });
   }
 }
 

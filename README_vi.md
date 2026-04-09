@@ -1,7 +1,7 @@
 # ❄️ Multi Air Conditioner Card
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![version](https://img.shields.io/badge/version-1.3-blue)
+![version](https://img.shields.io/badge/version-1.4-blue)
 ![HA](https://img.shields.io/badge/Home%20Assistant-2023.1+-green)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -25,33 +25,50 @@ Card tùy chỉnh cho Home Assistant Lovelace — điều khiển điều hòa n
 
 ---
 
-## ✨ Tính năng (v1.3)
+## ✨ Tính năng (v1.4)
 
 ### 🎨 Hiển thị & Giao diện
 - ❄️ **Đồng hồ nhiệt độ** — vòng cung động với màu sắc thay đổi theo nhiệt độ: xanh dương (lạnh) → xanh lơ → xanh lá → cam → đỏ (nóng)
-- 🏠 **Ảnh phòng** — ảnh riêng từng phòng kèm badge ON/OFF và nhiệt độ trực tiếp với màu tương ứng
+- 🔵 **Vòng nhiệt độ cài đặt** — vòng cung mỏng bên trong đồng hồ hiển thị nhiệt độ mục tiêu, màu theo chế độ HVAC đang hoạt động
+- 🏠 **Ảnh phòng** — ảnh riêng từng phòng (mặc định hoặc URL tùy chỉnh) kèm badge ON/OFF và nhiệt độ + độ ẩm trực tiếp với màu tương ứng
 - 📊 **Khối trạng thái** — tình trạng hoạt động, chỉ số PM2.5, nhiệt độ ngoài trời, độ ẩm và điện năng tiêu thụ
 - 🕐 **Đồng hồ thực** — hiển thị ngày giờ theo thời gian thực với lời chào theo buổi trong ngày
 - 🌿 **Badge Eco** — bật/tắt chế độ Eco trực tiếp từ đầu card
 
-### 🖥️ Hai chế độ hiển thị
-- **Full** — bố cục đầy đủ với tất cả các panel hiển thị (mặc định)
-- **Lite** — bố cục gọn nhẹ, ẩn panel bên trái, chỉ hiển thị tab phòng, nút nguồn, hẹn giờ và nút tắt tất cả — phù hợp cho dashboard nhỏ hoặc điện thoại
+### 🖥️ Ba chế độ hiển thị
+- **Full** — bố cục hai cột đầy đủ với tất cả các panel hiển thị (mặc định)
+- **Lite** — bố cục hai cột gọn nhẹ, ẩn ảnh phòng, phù hợp cho dashboard nhỏ hoặc điện thoại
+- **Super Lite** ⚡ — bố cục một cột siêu gọn với đồng hồ lớn, điều chỉnh nhiệt độ, chọn chế độ và chọn phòng; lý tưởng cho widget, sidebar hoặc không gian hẹp
+
+### ✨ Kiểu Popup (Super Lite)
+Khi dùng chế độ **Super Lite**, ô chọn chế độ HVAC và chọn phòng hỗ trợ 3 kiểu tương tác — cấu hình trong editor:
+- **Normal** — dropdown `<select>` gốc (tương thích tốt nhất, nhất quán trên iOS/Android)
+- **Effect** — popup kính tùy chỉnh với animation mở/đóng kiểu lò xo
+- **Wave** — cùng kiểu popup kính nhưng với animation gợn sóng khi mở
 
 ### 🎛️ Tùy chỉnh hiển thị từng thành phần
 Mỗi phần của card có thể bật/tắt riêng lẻ ngay trong editor:
 - Lời chào, nút chế độ HVAC (Cool / Heat / Dry / Fan từng nút riêng), bảng quạt, bảng hướng gió, thanh Eco/Fav/Clean, khối trạng thái & cảm biến, nhiệt độ ngoài trời, độ ẩm, công suất, nút hẹn giờ, nút tắt tất cả
+- **Nhiệt độ/Độ ẩm phòng** (Super Lite) — bật để hiển thị nhiệt độ & độ ẩm của phòng đang chọn trên header Super Lite thay vì dữ liệu cảm biến ngoài trời
 
 ### ❄️ Điều khiển nhiều phòng (tối đa 8 phòng)
-- **Tab chọn phòng** — hiển thị icon, tên, nhiệt độ và badge ON/OFF; luôn hiện 4 phòng, cuộn để xem thêm
+- **Tab chọn phòng** (Full / Lite) — hiển thị icon, tên, nhiệt độ và badge ON/OFF; luôn hiện 4 hàng, cuộn để xem thêm
+- **Dropdown chọn phòng** (Super Lite) — dropdown gọn / popup kính liệt kê tất cả phòng với nhiệt độ và badge ON/OFF
 - **Điều khiển HVAC từng phòng** — các nút chế độ Làm lạnh / Sưởi / Hút ẩm / Quạt với màu trạng thái
 - **Điều chỉnh nhiệt độ** — nút `+` / `−` để đặt nhiệt độ mong muốn
 - **Tốc độ quạt** — chuyển đổi Tự động / Thấp / Vừa / Cao với SVG cánh quạt động và biểu đồ cột
-- **Hướng gió** — chuyển đổi Cố định / Lên xuống / Trái phải / Tất cả với SVG sóng động
+- **Hướng gió** — chỉ cycle qua các chế độ thực sự được hỗ trợ bởi entity (đọc thuộc tính `swing_modes`)
+- **Ảnh phòng tùy chỉnh** — mỗi phòng hỗ trợ URL ảnh tùy chỉnh, tự động dùng ảnh mặc định nếu không có
+
+### 🌡️ Cảm biến môi trường từng phòng
+Mỗi phòng giờ hỗ trợ cảm biến nhiệt độ và độ ẩm riêng độc lập với entity điều hòa:
+- `entities[n].temp_entity` — ghi đè nhiệt độ hiển thị của phòng (hữu ích khi điều hòa không cung cấp `current_temperature`)
+- `entities[n].humidity_entity` — ghi đè độ ẩm hiển thị của phòng
+- Hiển thị trong badge ảnh phòng (Full/Lite) và trong header Super Lite khi bật **Nhiệt độ/Độ ẩm phòng**
 
 ### 🌿 Eco & Tác vụ nhanh
 - **Bật/tắt Eco** — kích hoạt chế độ Eco/preset cho điều hòa phòng đang chọn
-- **Chip tác vụ nhanh** — nút Eco, Fav, Clean
+- **Chip tác vụ nhanh** — nút Eco, Fav, Clean (chỉ chế độ Full)
 
 ### ⏱️ Hẹn giờ
 - **Hẹn giờ từng phòng** — 8 mốc thời gian: `30p · 1h · 1.5h · 2h · 3h · 4h · 6h · 8h` + ô nhập số phút tùy ý
@@ -116,13 +133,14 @@ Sau khi thêm, nhấn **✏️ Edit** để mở Config Editor.
 | # | Phần | Nội dung |
 |---|------|----------|
 | 1 | 🌐 **Ngôn ngữ** | 11 ngôn ngữ với ảnh cờ thật |
-| 2 | 🖥️ **Chế độ hiển thị** | Full đầy đủ hoặc Lite gọn nhẹ |
-| 3 | 🔢 **Số phòng** | Thanh trượt chọn 1–8 phòng |
-| 4 | ❄️ **Điều hòa** | Chọn entity, tên hiển thị và icon từng phòng |
-| 5 | 📡 **Cảm biến môi trường** | PM2.5, nhiệt độ ngoài trời, độ ẩm, điện năng |
-| 6 | 👁️ **Hiển thị** | Bật/tắt từng thành phần riêng lẻ |
-| 7 | 🎨 **Màu sắc** | Màu nhấn, màu chữ |
-| 8 | 🎨 **Màu nền** | 16 preset + bộ chọn hai màu tùy chỉnh |
+| 2 | 🖥️ **Chế độ hiển thị** | Full / Lite / Super Lite |
+| 3 | ✨ **Kiểu Popup** | Normal / Effect / Wave (chỉ Super Lite) |
+| 4 | 👁️ **Tùy chọn hiển thị** | Bật/tắt từng thành phần riêng lẻ |
+| 5 | 🔢 **Số phòng** | Thanh trượt chọn 1–8 phòng |
+| 6 | ❄️ **Điều hòa** | Entity, tên, icon, ảnh URL, cảm biến nhiệt độ/độ ẩm từng phòng |
+| 7 | 📡 **Cảm biến môi trường** | PM2.5, nhiệt độ ngoài trời, độ ẩm, điện năng |
+| 8 | 🎨 **Màu sắc** | Màu nhấn, màu chữ |
+| 9 | 🎨 **Màu nền** | 16 preset + bộ chọn hai màu tùy chỉnh |
 
 ---
 
@@ -136,6 +154,9 @@ Sau khi thêm, nhấn **✏️ Edit** để mở Config Editor.
 | `entities[n].label` | string | Tên hiển thị của phòng |
 | `entities[n].icon` | string | Emoji icon cho tab phòng |
 | `entities[n].area` | string | Diện tích phòng (ví dụ: `25 m²`) |
+| `entities[n].image` | string | URL ảnh phòng tùy chỉnh (tuỳ chọn) |
+| `entities[n].temp_entity` | `sensor` | Cảm biến nhiệt độ phòng (nếu điều hòa không có) |
+| `entities[n].humidity_entity` | `sensor` | Cảm biến độ ẩm phòng (nếu điều hòa không có) |
 
 ### Cảm biến môi trường (tuỳ chọn)
 
@@ -153,7 +174,8 @@ Sau khi thêm, nhấn **✏️ Edit** để mở Config Editor.
 | Config key | Kiểu | Mặc định | Mô tả |
 |---|---|---|---|
 | `language` | string | `vi` | `vi`/`en`/`de`/`fr`/`nl`/`pl`/`sv`/`hu`/`cs`/`it`/`pt` |
-| `view_mode` | string | `full` | `full` = đầy đủ · `lite` = gọn nhẹ |
+| `view_mode` | string | `full` | `full` · `lite` · `super_lite` |
+| `popup_style` | string | `normal` | Kiểu popup Super Lite: `normal` · `effect` · `wave` |
 | `room_count` | number | `4` | Số phòng hiển thị (1–8) |
 | `owner_name` | string | `Smart Home` | Tên chủ nhà hiển thị trong lời chào |
 | `show_greet` | boolean | `true` | Hiện lời chào |
@@ -170,6 +192,7 @@ Sau khi thêm, nhấn **✏️ Edit** để mở Config Editor.
 | `show_power` | boolean | `true` | Hiện điện năng tiêu thụ |
 | `show_all_off` | boolean | `true` | Hiện nút Tắt tất cả |
 | `show_timer` | boolean | `true` | Hiện nút Hẹn giờ |
+| `show_room_env` | boolean | `false` | Super Lite: hiện nhiệt độ & độ ẩm phòng đang chọn trên header (thay cho ngoài trời) |
 | `background_preset` | string | `default` | Tên preset gradient |
 | `bg_color1` | hex | `#001e2b` | Màu gradient tùy chỉnh 1 (trên trái) |
 | `bg_color2` | hex | `#12c6f3` | Màu gradient tùy chỉnh 2 (dưới phải) |
@@ -216,6 +239,9 @@ entities:
     label: Phòng khách
     area: "25 m²"
     icon: 🛋
+    image: "https://example.com/photos/living.jpg"     # tuỳ chọn: ảnh phòng riêng
+    temp_entity: sensor.nhiet_do_phong_khach            # tuỳ chọn: cảm biến nhiệt độ phòng
+    humidity_entity: sensor.do_am_phong_khach           # tuỳ chọn: cảm biến độ ẩm phòng
   - entity_id: climate.bed_air_conditioning
     label: Phòng ngủ
     area: "18 m²"
@@ -233,6 +259,26 @@ pm25_entity: sensor.pm25
 outdoor_temp_entity: sensor.outdoor_temperature
 humidity_entity: sensor.outdoor_humidity
 power_entity: sensor.ac_power_kwh
+```
+
+### Ví dụ Super Lite
+
+```yaml
+type: custom:multi-air-conditioner-card
+language: vi
+view_mode: super_lite
+popup_style: effect     # normal | effect | wave
+show_room_env: true     # hiện nhiệt độ/độ ẩm phòng trên header
+room_count: 4
+entities:
+  - entity_id: climate.dieu_hoa_living
+    label: Phòng khách
+    icon: 🛋
+    temp_entity: sensor.nhiet_do_phong_khach
+    humidity_entity: sensor.do_am_phong_khach
+  - entity_id: climate.bed_air_conditioning
+    label: Phòng ngủ
+    icon: 🛌
 ```
 
 ### Ví dụ chế độ Lite
@@ -266,6 +312,18 @@ entities:
 ---
 
 ## 📋 Lịch sử thay đổi
+
+### v1.4
+- ⚡ Chế độ **Super Lite** mới — bố cục một cột siêu gọn với đồng hồ lớn, điều chỉnh nhiệt độ, chọn chế độ HVAC và chọn phòng
+- ✨ **Kiểu Popup** (Super Lite) — chọn giữa Normal (gốc), Effect (kính + animation lò xo) hoặc Wave (kính + animation gợn sóng) cho ô chọn chế độ và phòng
+- 🌡️ **Cảm biến nhiệt độ từng phòng** — đặt `temp_entity` riêng cho mỗi phòng để ghi đè `current_temperature` khi điều hòa không cung cấp
+- 💧 **Cảm biến độ ẩm từng phòng** — đặt `humidity_entity` riêng cho mỗi phòng để hiển thị độ ẩm trong nhà chính xác
+- 🏠 **Ảnh phòng tùy chỉnh** — đặt URL ảnh riêng cho từng phòng qua `entities[n].image`
+- 🔵 **Vòng nhiệt độ cài đặt** — vòng cung mỏng bên trong đồng hồ hiển thị nhiệt độ mục tiêu, màu theo chế độ HVAC đang hoạt động
+- 💧 **Độ ẩm phòng trên badge ảnh** — giá trị độ ẩm hiển thị cạnh nhiệt độ ở góc ảnh phòng (chế độ Full/Lite)
+- 👁️ **Toggle show_room_env** — header Super Lite có thể hiện nhiệt độ & độ ẩm của phòng đang chọn thay vì dữ liệu ngoài trời
+- 🔧 **Sửa lỗi hướng gió** — vòng lặp hướng gió giờ đọc thuộc tính `swing_modes` từ entity, tránh lỗi "invalid swing mode" trên các điều hòa có ít chế độ xoay
+- 🐛 Sửa lỗi và cải thiện giao diện
 
 ### v1.3
 - 🖥️ Chế độ **Lite** mới — bố cục gọn nhẹ lý tưởng cho mobile hoặc sidebar

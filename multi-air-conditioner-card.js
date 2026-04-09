@@ -1725,10 +1725,16 @@ class AcControllerCardV2 extends HTMLElement {
     // Localise mode labels and fan/swing labels
     mode = Object.assign({}, mode, { lbl: tr.modes[hvac] || mode.lbl });
     var fanLabels   = tr.fans   || ['Auto','Low','Medium','High'];
-    // Build fan mode label map for entity's actual modes
+    // Build fan mode label map: ưu tiên translation cho FAN_LEVELS, fallback capitalize tên mode
     var fanModeToLabel = {};
     for (var fli = 0; fli < FAN_LEVELS.length; fli++) {
       fanModeToLabel[FAN_LEVELS[fli]] = fanLabels[fli] || FAN_LEVELS[fli];
+    }
+    // Thêm label cho các mode entity có mà không nằm trong FAN_LEVELS
+    for (var fli2 = 0; fli2 < actualFanModes.length; fli2++) {
+      if (!fanModeToLabel[actualFanModes[fli2]]) {
+        fanModeToLabel[actualFanModes[fli2]] = actualFanModes[fli2].charAt(0).toUpperCase() + actualFanModes[fli2].slice(1);
+      }
     }
     var currentFanLabel = fanModeToLabel[fanMode] || fanMode;
     var swingLabels = tr.swings || ['Fixed','Up/Down','Left/Right','Both'];
@@ -1826,7 +1832,10 @@ class AcControllerCardV2 extends HTMLElement {
           + ' C ' + c2x.toFixed(2) + ' ' + c2y.toFixed(2) + ' ' + c3x.toFixed(2) + ' ' + c3y.toFixed(2) + ' ' + bRx.toFixed(2) + ' ' + bRy.toFixed(2)
           + ' Z';
       }
-      var bladeCount = [4, 3, 4, 5][fi];
+      // Blade count scales with fan speed: min 3, max 6
+      var bladeCount = actualFanModes.length <= 4
+        ? ([4, 3, 4, 5][fi] || 4)
+        : Math.max(3, Math.min(6, 3 + Math.round(fi * 3 / (actualFanModes.length - 1))));
       var blades = '';
       for (var b = 0; b < bladeCount; b++) {
         var ang = b * (360 / bladeCount);
@@ -1834,7 +1843,8 @@ class AcControllerCardV2 extends HTMLElement {
         blades += '<path d="' + fatBlade(ang) + '" fill="' + color + '" fill-opacity="0.82"'
           + ' stroke="rgba(255,255,255,0.55)" stroke-width="0.8" stroke-linejoin="round"/>';
       }
-      var animStyle = fi === 0 ? 'style="transform-origin:21px 21px;animation:fanSpin 1.4s linear infinite"' : '';
+      var isAutoFan = fanMode === 'auto';
+      var animStyle = isAutoFan ? 'style="transform-origin:21px 21px;animation:fanSpin 1.4s linear infinite"' : '';
       return '<svg width="' + dim + '" height="' + dim + '" viewBox="0 0 42 42" ' + animStyle + '>'
         + '<defs><filter id="fanGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'
         + '<g filter="url(#fanGlow)">'
@@ -1844,7 +1854,13 @@ class AcControllerCardV2 extends HTMLElement {
         + '<circle cx="21" cy="21" r="2" fill="rgba(220,240,255,0.85)"/>'
         + '</svg>';
     })(fi);
+    // Swing active: true nếu swing_mode khác off, hoặc có vane entity đang active
     var swingActive = swingMode !== 'off';
+    if (vaneVertEnt && this._hass && this._hass.states[vaneVertEnt]) {
+      swingActive = this._hass.states[vaneVertEnt].state !== 'off';
+    } else if (vaneHorizEnt && this._hass && this._hass.states[vaneHorizEnt]) {
+      swingActive = this._hass.states[vaneHorizEnt].state !== 'off';
+    }
     var sColor = swingActive ? 'var(--accent)' : 'rgba(255,255,255,0.3)';
     var sOp    = swingActive ? '1' : '0.5';
     var swingSvg = '<svg width="38" height="28" viewBox="0 0 38 28" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -1954,12 +1970,12 @@ class AcControllerCardV2 extends HTMLElement {
       var slShowRoomEnv = cfg.show_room_env === true;
       var slEnvTemp, slEnvHumidity, slEnvIsRoom;
       if (slShowRoomEnv) {
-        // Nhiệt độ phòng: ưu tiên cảm biến riêng, fallback current_temperature của entity
+        // Nhiệt độ phòng: luôn hiện khi show_room_env bật (không phụ thuộc show_outdoor_temp)
         var roomEntCfgSL = (cfg.entities && cfg.entities[this._activeIdx]) || {};
         var roomTempSL = curTemp; // curTemp đã tính từ sensor/entity bên trên
         var roomHumSL  = roomHumidityRaw; // roomHumidityRaw đã tính bên trên
-        slEnvTemp     = (cfg.show_outdoor_temp !== false) && roomTempSL > 0 ? Math.round(roomTempSL) + '°' : null;
-        slEnvHumidity = (cfg.show_humidity !== false) && roomHumSL  > 0 ? Math.round(roomHumSL) + '%'  : null;
+        slEnvTemp     = roomTempSL > 0 ? Math.round(roomTempSL) + '°' : null;
+        slEnvHumidity = roomHumSL  > 0 ? Math.round(roomHumSL) + '%'  : null;
         slEnvIsRoom   = true;
       } else {
         slEnvTemp     = slOutdoorTemp;
@@ -1978,6 +1994,12 @@ class AcControllerCardV2 extends HTMLElement {
       for (var fmi = 0; fmi < FAN_LEVELS.length; fmi++) {
         slFanLabelMap[FAN_LEVELS[fmi]] = slFanTr[fmi] || FAN_LEVELS[fmi];
       }
+      // Thêm label cho các mode entity có mà không nằm trong FAN_LEVELS
+      for (var fmi2 = 0; fmi2 < slFanModes.length; fmi2++) {
+        if (!slFanLabelMap[slFanModes[fmi2]]) {
+          slFanLabelMap[slFanModes[fmi2]] = slFanModes[fmi2].charAt(0).toUpperCase() + slFanModes[fmi2].slice(1);
+        }
+      }
       slFanLabel = slFanLabelMap[slFanMode] || slFanMode;
 
       // Vane entities for super lite
@@ -1993,8 +2015,8 @@ class AcControllerCardV2 extends HTMLElement {
       var slHasVane = false;
       if (slVaneVertEntity || slVaneHorizEntity) {
         slHasVane = true;
-        if (slVaneVertVal && slVaneHorizVal) slVaneLabel = slVaneVertVal;
-        else slVaneLabel = slVaneVertVal || slVaneHorizVal || 'off';
+        // Ưu tiên entity nào có giá trị, nếu cả 2 đều có thì hiện entity đầu tiên được cấu hình
+        slVaneLabel = (slVaneVertEntity ? slVaneVertVal : null) || slVaneHorizVal || 'off';
       } else if (cfg.show_swing !== false) {
         slHasVane = true;
         slVaneLabel = swingMode !== 'off' ? (swingLabels[SWING_LEVELS.indexOf(swingMode)] || swingMode) : swingLabels[0];

@@ -1,8 +1,21 @@
 /**
  * Multi Air Conditioner Card
- * v1.4 Designed by @doanlong1412 from 🇻🇳 Vietnam
+ * v1.6 Designed by @doanlong1412 from 🇻🇳 Vietnam
  * HACS-compatible Web Component
  *
+ * ─── What's new in v1.6 ──────────────────────────────────────────────────
+ * 🐛 Scale flicker fix — debounced ResizeObserver + double-rAF + chỉ set style
+ *    khi giá trị thực sự thay đổi; bỏ CSS transition trên transform để tránh
+ *    vòng lặp layout trên mobile
+ * 🐛 Tooltip nháy loạn fix — tooltip hiện 5s rồi tự ẩn (mobile); dùng timer
+ *    có clear/reset khi tap lại; double-rAF đảm bảo định vị chính xác;
+ *    cleanup timer trong disconnectedCallback tránh memory leak
+ * 🎨 MDI room icons — all room icons now use mdi:* strings and render as native <ha-icon> elements throughout the card (tabs, popups, button labels); emoji still accepted as fallback; users can enter any MDI icon in the editor
+ * 🐛 Fan blade fix — fixed an issue where the fan blade SVG would not render when the fan level index was ≥ 4 (Low-Mid and above), caused by an undersized blade-count array
+ * ⚡ Per-room power sensor — each room has its own entities[n].power_entity; the displayed value updates automatically when switching rooms in all three view modes
+ * 🔢 Power unit selector — choose kW or W in the editor; values ≥ 1000 W auto-convert to kW
+ * 📍 Super Lite power indicator — power reading shown inline next to humidity in the header top-left; toggle with show_sl_room_power
+ * 
  * ─── What's new in v1.4 ───────────────────────────────────────────────────────
  * ✨ Popup style option (Super Lite) — Normal (native select, iOS/Android consistent)
  *    vs Effect (custom glass popup with spring animation, same style as room picker)
@@ -40,7 +53,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'CHẾ ĐỘ',
     statusLabel: 'TRẠNG THÁI',
     statusOn: 'ĐANG CHẠY', statusOff: 'TẮT',
-    airGood: 'Chất lượng không khí tốt', pressOn: 'Nhấn nguồn để bật',
+    airGood: 'Chất lượng không khí tốt', outdoorLabel: 'Ngoài trời', pressOn: 'Nhấn nguồn để bật',
     dustLabel: 'Bụi mịn',
     fanLabel: 'Tốc độ quạt', swingLabel: 'Hướng gió',
     allOff: 'Tắt tất cả', allOffSub: 'Nhấn để tắt mọi phòng',
@@ -49,7 +62,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Hủy', doOff: '⏻ Tắt hết',
     overlayOn: 'ĐANG BẬT', overlayOff: 'TẮT',
     modes: { cool:'Làm lạnh', heat:'Sưởi', dry:'Hút ẩm', fan_only:'Quạt', off:'Tắt' },
-    fans:   ['Tự động','Thấp','Vừa','Cao'],
+    fans:   ['Tự động','Min','Thấp','Thấp-Vừa','Vừa','Vừa-Cao','Cao','Max'],
     swings: ['Cố định','Lên xuống','Trái phải','Tất cả'],
     comfort: { dry:'Không khí khô ráo', fan_only:'Gió nhẹ mát mẻ', off:'Đang tắt' },
     comfortTemp: function(t) {
@@ -91,6 +104,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Nút Tắt tất cả', edShowAllOffDesc: 'Hiện nút tắt toàn bộ điều hòa',
     edShowTimer: 'Nút Hẹn giờ', edShowTimerDesc: 'Hiện nút hẹn giờ tắt/bật',
     edShowRoomEnv: 'Nhiệt độ/Độ ẩm phòng', edShowRoomEnvDesc: 'Hiện nhiệt độ & độ ẩm phòng đang chọn (Super Lite)',
+    edShowSlFan: '💨 Tốc độ quạt (Super Lite)', edShowSlFanDesc: 'Hiện nút quạt trong Super Lite',
+    edShowSlSwing: '🔄 Hướng gió (Super Lite)', edShowSlSwingDesc: 'Hiện nút hướng gió trong Super Lite',
+    edShowSlRoomPower: '⚡ Tiêu thụ điện phòng (Super Lite)', edShowSlRoomPowerDesc: 'Hiện mức tiêu thụ điện phòng đang chọn',
+    edPowerUnit: '⚡ Đơn vị công suất', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Nhiệt độ ngoài trời', edShowHumidity: 'Độ ẩm', edShowPower: 'Công suất (kW)',
     edRoomCountLabel: function(n) { return '🏠 Số lượng phòng (1–8, mặc định 4)'; },
     edRoomsHeader: function(n) { return '❄ Điều hòa (' + n + ' phòng)'; },
@@ -100,20 +117,17 @@ const AC_TRANSLATIONS = {
     edBg: 'Màu nền',
     edAcEntity: '❄ Entity điều hòa (climate.*)',
     edAcName: '🏷 Tên hiển thị',
-    edAcIcon: '🎨 Icon (emoji)',
+    edAcIcon: '🎨 MDI Icon (vd: mdi:sofa)',
     edAcImage: '🖼 Ảnh phòng (URL)',
     edRoomTempEntity: '🌡 Cảm biến nhiệt độ phòng (nếu điều hòa không có)',
     edRoomHumidityEntity: '💧 Cảm biến độ ẩm phòng (nếu điều hòa không có)',
-    edVaneVertical: '↕ Cánh gió dọc (input_select)',
-    edVaneHorizontal: '↔ Cánh gió ngang (input_select)',
+    edRoomPowerEntity: '⚡ Cảm biến tiêu thụ điện phòng (sensor.*)',
     edPm25: '🌫 Bụi mịn PM2.5',
     edOutdoorTemp: '🌡 Nhiệt độ ngoài trời',
     edHumidity: '💧 Độ ẩm ngoài trời',
     edPower: '⚡ Tiêu thụ điện (kW)',
-    edVaneVerticalGlobal: '↕ Cánh gió dọc (mặc định)',
-    edVaneHorizontalGlobal: '↔ Cánh gió ngang (mặc định)',
     rooms: ['Phòng khách','Phòng ngủ','Phòng ăn','Văn phòng'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   en: {
     lang: 'English', flag: 'gb',
@@ -132,7 +146,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODE',
     statusLabel: 'STATUS',
     statusOn: 'RUNNING', statusOff: 'OFF',
-    airGood: 'Air quality is good', pressOn: 'Press power to turn on',
+    airGood: 'Air quality is good', outdoorLabel: 'Outdoor', pressOn: 'Press power to turn on',
     dustLabel: 'Fine dust',
     fanLabel: 'Fan speed', swingLabel: 'Airflow',
     allOff: 'Turn all off', allOffSub: 'Tap to turn off all rooms',
@@ -141,7 +155,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Cancel', doOff: '⏻ Turn all off',
     overlayOn: 'ON', overlayOff: 'OFF',
     modes: { cool:'Cool', heat:'Heat', dry:'Dry', fan_only:'Fan', off:'Off' },
-    fans:   ['Auto','Low','Medium','High'],
+    fans:   ['Auto','Min','Low','Low-Mid','Medium','High-Mid','High','Max'],
     swings: ['Fixed','Up/Down','Left/Right','Both'],
     comfort: { dry:'Dry and comfortable', fan_only:'Light fresh breeze', off:'Currently off' },
     comfortTemp: function(t) {
@@ -183,6 +197,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Turn all off button', edShowAllOffDesc: 'Show the turn-all-off button',
     edShowTimer: 'Timer button', edShowTimerDesc: 'Show the timer button',
     edShowRoomEnv: 'Room Temp / Humidity', edShowRoomEnvDesc: 'Show selected room temp & humidity (Super Lite)',
+    edShowSlFan: '💨 Fan speed (Super Lite)', edShowSlFanDesc: 'Show fan button in Super Lite',
+    edShowSlSwing: '🔄 Airflow (Super Lite)', edShowSlSwingDesc: 'Show airflow button in Super Lite',
+    edShowSlRoomPower: '⚡ Room power (Super Lite)', edShowSlRoomPowerDesc: 'Show selected room power consumption',
+    edPowerUnit: '⚡ Power unit', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Outdoor temperature', edShowHumidity: 'Humidity', edShowPower: 'Power (kW)',
     edRoomCountLabel: function(n) { return '🏠 Number of rooms (1–8, default 4)'; },
     edRoomsHeader: function(n) { return '❄ Air Conditioners (' + n + ' rooms)'; },
@@ -192,20 +210,17 @@ const AC_TRANSLATIONS = {
     edBg: 'Background',
     edAcEntity: '❄ AC entity (climate.*)',
     edAcName: '🏷 Display name',
-    edAcIcon: '🎨 Icon (emoji)',
+    edAcIcon: '🎨 MDI Icon (vd: mdi:sofa)',
     edAcImage: '🖼 Ảnh phòng (URL)',
     edRoomTempEntity: '🌡 Room temperature sensor (if AC has none)',
     edRoomHumidityEntity: '💧 Room humidity sensor (if AC has none)',
-    edVaneVertical: '↕ Vertical vane (input_select)',
-    edVaneHorizontal: '↔ Horizontal vane (input_select)',
+    edRoomPowerEntity: '⚡ Room power sensor (sensor.*)',
     edPm25: '🌫 Fine dust PM2.5',
     edOutdoorTemp: '🌡 Outdoor temperature',
     edHumidity: '💧 Outdoor humidity',
     edPower: '⚡ Power consumption (kW)',
-    edVaneVerticalGlobal: '↕ Vertical vane (default)',
-    edVaneHorizontalGlobal: '↔ Horizontal vane (default)',
     rooms: ['Living room','Bedroom','Dining room','Office'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   de: {
     lang: 'Deutsch', flag: 'de',
@@ -224,7 +239,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODUS',
     statusLabel: 'STATUS',
     statusOn: 'LÄUFT', statusOff: 'AUS',
-    airGood: 'Luftqualität gut', pressOn: 'Einschalten drücken',
+    airGood: 'Luftqualität gut', outdoorLabel: 'Außen', pressOn: 'Einschalten drücken',
     dustLabel: 'Feinstaub',
     fanLabel: 'Lüfterstufe', swingLabel: 'Luftrichtung',
     allOff: 'Alle ausschalten', allOffSub: 'Alle Räume ausschalten',
@@ -233,7 +248,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Abbrechen', doOff: '⏻ Alle aus',
     overlayOn: 'AN', overlayOff: 'AUS',
     modes: { cool:'Kühlen', heat:'Heizen', dry:'Entfeuchten', fan_only:'Lüfter', off:'Aus' },
-    fans:   ['Auto','Niedrig','Mittel','Hoch'],
+    fans:   ['Auto','Min','Niedrig','Niedrig-Mittel','Mittel','Mittel-Hoch','Hoch','Max'],
     swings: ['Fest','Auf/Ab','Links/Rechts','Alle'],
     comfort: { dry:'Trockene Luft', fan_only:'Angenehme Brise', off:'Ausgeschaltet' },
     comfortTemp: function(t) {
@@ -275,6 +290,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Alle-aus-Schaltfläche', edShowAllOffDesc: 'Alle-ausschalten-Schaltfläche anzeigen',
     edShowTimer: 'Timer-Schaltfläche', edShowTimerDesc: 'Timer-Schaltfläche anzeigen',
     edShowRoomEnv: 'Raum Temp/Luftfeuchte', edShowRoomEnvDesc: 'Raumtemp. & Luftfeuchte (Super Lite)',
+    edShowSlFan: '💨 Lüftergeschwindigkeit (Super Lite)', edShowSlFanDesc: 'Lüftertaste in Super Lite anzeigen',
+    edShowSlSwing: '🔄 Luftrichtung (Super Lite)', edShowSlSwingDesc: 'Luftrichtungstaste in Super Lite anzeigen',
+    edShowSlRoomPower: '⚡ Raumleistung (Super Lite)', edShowSlRoomPowerDesc: 'Raumverbrauch der gewählten Zone anzeigen',
+    edPowerUnit: '⚡ Leistungseinheit', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Außentemperatur', edShowHumidity: 'Luftfeuchtigkeit', edShowPower: 'Leistung (kW)',
     edRoomCountLabel: function(n) { return '🏠 Anzahl der Räume (1–8, Standard 4)'; },
     edRoomsHeader: function(n) { return '❄ Klimaanlagen (' + n + ' Räume)'; },
@@ -285,15 +304,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Klimaanlage-Entity (climate.*)',
     edRoomTempEntity: '🌡 Raumtemperatursensor (falls Klimaanlage keinen hat)',
     edRoomHumidityEntity: '💧 Raumfeuchtigkeitssensor (falls Klimaanlage keinen hat)',
+    edRoomPowerEntity: '⚡ Raumleistungssensor (sensor.*)',
     edAcName: '🏷 Anzeigename',
-    edAcIcon: '🎨 Symbol (Emoji)',
+    edAcIcon: '🎨 MDI Icon (z.B. mdi:sofa)',
     edAcImage: '🖼 Raumfoto (URL)',
     edPm25: '🌫 Feinstaub PM2.5',
     edOutdoorTemp: '🌡 Außentemperatur',
     edHumidity: '💧 Außenluftfeuchtigkeit',
     edPower: '⚡ Stromverbrauch (kW)',
     rooms: ['Wohnzimmer','Schlafzimmer','Esszimmer','Büro'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   fr: {
     lang: 'Français', flag: 'fr',
@@ -312,7 +332,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODE',
     statusLabel: 'STATUT',
     statusOn: 'EN MARCHE', statusOff: 'ÉTEINT',
-    airGood: 'Qualité de l\'air bonne', pressOn: 'Appuyer pour allumer',
+    airGood: 'Qualité de l\'air bonne', outdoorLabel: 'Extérieur', pressOn: 'Appuyer pour allumer',
     dustLabel: 'Particules fines',
     fanLabel: 'Vitesse ventilateur', swingLabel: 'Direction d\'air',
     allOff: 'Tout éteindre', allOffSub: 'Éteindre toutes les pièces',
@@ -321,7 +341,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Annuler', doOff: '⏻ Tout éteindre',
     overlayOn: 'ALLUMÉ', overlayOff: 'ÉTEINT',
     modes: { cool:'Refroidir', heat:'Chauffer', dry:'Déshumidifier', fan_only:'Ventilateur', off:'Éteint' },
-    fans:   ['Auto','Faible','Moyen','Élevé'],
+    fans:   ['Auto','Min','Faible','Faible-Moyen','Moyen','Moyen-Élevé','Élevé','Max'],
     swings: ['Fixe','Haut/Bas','Gauche/Droite','Tous'],
     comfort: { dry:'Air sec et confortable', fan_only:'Brise légère et fraîche', off:'Actuellement éteint' },
     comfortTemp: function(t) {
@@ -363,6 +383,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Bouton Tout éteindre', edShowAllOffDesc: 'Afficher le bouton tout éteindre',
     edShowTimer: 'Bouton minuterie', edShowTimerDesc: 'Afficher le bouton minuterie',
     edShowRoomEnv: 'Temp/Humidité pièce', edShowRoomEnvDesc: 'Afficher temp. & humidité de la pièce (Super Lite)',
+    edShowSlFan: '💨 Vitesse ventilateur (Super Lite)', edShowSlFanDesc: 'Afficher bouton ventilateur en Super Lite',
+    edShowSlSwing: '🔄 Direction air (Super Lite)', edShowSlSwingDesc: 'Afficher bouton direction en Super Lite',
+    edShowSlRoomPower: '⚡ Consommation pièce (Super Lite)', edShowSlRoomPowerDesc: 'Afficher la consommation de la pièce sélectionnée',
+    edPowerUnit: '⚡ Unité puissance', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Température extérieure', edShowHumidity: 'Humidité', edShowPower: 'Puissance (kW)',
     edRoomCountLabel: function(n) { return '🏠 Nombre de pièces (1–8, défaut 4)'; },
     edRoomsHeader: function(n) { return '❄ Climatiseurs (' + n + ' pièces)'; },
@@ -373,15 +397,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Entité clim. (climate.*)',
     edRoomTempEntity: '🌡 Capteur température pièce (si clim. n\'en a pas)',
     edRoomHumidityEntity: '💧 Capteur humidité pièce (si clim. n\'en a pas)',
+    edRoomPowerEntity: '⚡ Capteur consommation pièce (sensor.*)',
     edAcName: '🏷 Nom affiché',
-    edAcIcon: '🎨 Icône (emoji)',
+    edAcIcon: '🎨 Icône MDI (ex: mdi:sofa)',
     edAcImage: '🖼 Photo pièce (URL)',
     edPm25: '🌫 Particules fines PM2.5',
     edOutdoorTemp: '🌡 Température extérieure',
     edHumidity: '💧 Humidité extérieure',
     edPower: '⚡ Consommation (kW)',
     rooms: ['Salon','Chambre','Salle à manger','Bureau'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   nl: {
     lang: 'Nederlands', flag: 'nl',
@@ -400,7 +425,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODUS',
     statusLabel: 'STATUS',
     statusOn: 'ACTIEF', statusOff: 'UIT',
-    airGood: 'Luchtkwaliteit goed', pressOn: 'Druk om in te schakelen',
+    airGood: 'Luchtkwaliteit goed', outdoorLabel: 'Buiten', pressOn: 'Druk om in te schakelen',
     dustLabel: 'Fijnstof',
     fanLabel: 'Ventilatorsnelheid', swingLabel: 'Luchtrichting',
     allOff: 'Alles uitschakelen', allOffSub: 'Alle kamers uitschakelen',
@@ -409,7 +434,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Annuleren', doOff: '⏻ Alles uit',
     overlayOn: 'AAN', overlayOff: 'UIT',
     modes: { cool:'Koelen', heat:'Verwarmen', dry:'Ontvochtigen', fan_only:'Ventilator', off:'Uit' },
-    fans:   ['Auto','Laag','Medium','Hoog'],
+    fans:   ['Auto','Min','Laag','Laag-Medium','Medium','Medium-Hoog','Hoog','Max'],
     swings: ['Vast','Op/Neer','Links/Rechts','Alle'],
     comfort: { dry:'Droge lucht', fan_only:'Lichte frisse bries', off:'Momenteel uit' },
     comfortTemp: function(t) {
@@ -451,6 +476,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Alles-uit-knop', edShowAllOffDesc: 'Alles-uitschakelknop weergeven',
     edShowTimer: 'Timerknop', edShowTimerDesc: 'Timerknop weergeven',
     edShowRoomEnv: 'Kamer Temp/Vochtigheid', edShowRoomEnvDesc: 'Kamertemp. & vochtigheid tonen (Super Lite)',
+    edShowSlFan: '💨 Ventilatorsnelheid (Super Lite)', edShowSlFanDesc: 'Ventilatorknop tonen in Super Lite',
+    edShowSlSwing: '🔄 Luchtrichting (Super Lite)', edShowSlSwingDesc: 'Luchtrichtingsknop tonen in Super Lite',
+    edShowSlRoomPower: '⚡ Kamerverbruik (Super Lite)', edShowSlRoomPowerDesc: 'Verbruik geselecteerde kamer tonen',
+    edPowerUnit: '⚡ Vermogenseenheid', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Buitentemperatuur', edShowHumidity: 'Vochtigheid', edShowPower: 'Vermogen (kW)',
     edRoomCountLabel: function(n) { return '🏠 Aantal kamers (1–8, standaard 4)'; },
     edRoomsHeader: function(n) { return '❄ Airconditioners (' + n + ' kamers)'; },
@@ -461,15 +490,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ AC-entiteit (climate.*)',
     edRoomTempEntity: '🌡 Kamertemperatuursensor (als AC dit niet heeft)',
     edRoomHumidityEntity: '💧 Kamerluchtvochtigheidssensor (als AC dit niet heeft)',
+    edRoomPowerEntity: '⚡ Kamer vermogenssensor (sensor.*)',
     edAcName: '🏷 Weergavenaam',
-    edAcIcon: '🎨 Pictogram (emoji)',
+    edAcIcon: '🎨 MDI Icoon (bijv. mdi:sofa)',
     edAcImage: '🖼 Kamerafoto (URL)',
     edPm25: '🌫 Fijnstof PM2.5',
     edOutdoorTemp: '🌡 Buitentemperatuur',
     edHumidity: '💧 Buitenvochtigheid',
     edPower: '⚡ Stroomverbruik (kW)',
     rooms: ['Woonkamer','Slaapkamer','Eetkamer','Kantoor'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   pl: {
     lang: 'Polski', flag: 'pl',
@@ -488,7 +518,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'TRYB',
     statusLabel: 'STATUS',
     statusOn: 'DZIAŁA', statusOff: 'WYŁ',
-    airGood: 'Jakość powietrza dobra', pressOn: 'Naciśnij aby włączyć',
+    airGood: 'Jakość powietrza dobra', outdoorLabel: 'Outdoor', pressOn: 'Naciśnij aby włączyć',
     dustLabel: 'Pył zawieszony',
     fanLabel: 'Prędkość wentylatora', swingLabel: 'Kierunek przepływu',
     allOff: 'Wyłącz wszystkie', allOffSub: 'Naciśnij aby wyłączyć wszystkie pokoje',
@@ -497,7 +527,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Anuluj', doOff: '⏻ Wyłącz wszystkie',
     overlayOn: 'WŁ', overlayOff: 'WYŁ',
     modes: { cool:'Chłodzenie', heat:'Ogrzewanie', dry:'Osuszanie', fan_only:'Wentylator', off:'Wyłącz' },
-    fans:   ['Auto','Niski','Średni','Wysoki'],
+    fans:   ['Auto','Min','Niski','Niski-Średni','Średni','Średni-Wysoki','Wysoki','Max'],
     swings: ['Stały','Góra/Dół','Lewo/Prawo','Wszystkie'],
     comfort: { dry:'Suche powietrze', fan_only:'Lekka świeża bryza', off:'Aktualnie wyłączone' },
     comfortTemp: function(t) {
@@ -539,6 +569,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Przycisk wyłącz wszystkie', edShowAllOffDesc: 'Pokaż przycisk wyłącz wszystkie',
     edShowTimer: 'Przycisk timera', edShowTimerDesc: 'Pokaż przycisk timera',
     edShowRoomEnv: 'Temp/Wilgotność pokoju', edShowRoomEnvDesc: 'Pokaż temp. i wilgotność pokoju (Super Lite)',
+    edShowSlFan: '💨 Prędkość wentylatora (Super Lite)', edShowSlFanDesc: 'Pokaż przycisk wentylatora w Super Lite',
+    edShowSlSwing: '🔄 Kierunek powietrza (Super Lite)', edShowSlSwingDesc: 'Pokaż przycisk kierunku w Super Lite',
+    edShowSlRoomPower: '⚡ Moc pokoju (Super Lite)', edShowSlRoomPowerDesc: 'Pokaż zużycie wybranego pokoju',
+    edPowerUnit: '⚡ Jednostka mocy', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Temperatura zewnętrzna', edShowHumidity: 'Wilgotność', edShowPower: 'Moc (kW)',
     edRoomCountLabel: function(n) { return '🏠 Liczba pokojów (1–8, domyślnie 4)'; },
     edRoomsHeader: function(n) { return '❄ Klimatyzatory (' + n + ' pokoje)'; },
@@ -549,15 +583,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Encja klimatyzatora (climate.*)',
     edRoomTempEntity: '🌡 Czujnik temperatury pokoju (jeśli AC nie ma)',
     edRoomHumidityEntity: '💧 Czujnik wilgotności pokoju (jeśli AC nie ma)',
+    edRoomPowerEntity: '⚡ Czujnik mocy pokoju (sensor.*)',
     edAcName: '🏷 Nazwa wyświetlana',
-    edAcIcon: '🎨 Ikona (emoji)',
+    edAcIcon: '🎨 MDI Ikona (np. mdi:sofa)',
     edAcImage: '🖼 Zdjęcie pokoju (URL)',
     edPm25: '🌫 Pył zawieszony PM2.5',
     edOutdoorTemp: '🌡 Temperatura zewnętrzna',
     edHumidity: '💧 Wilgotność zewnętrzna',
     edPower: '⚡ Zużycie energii (kW)',
     rooms: ['Salon','Sypialnia','Jadalnia','Biuro'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   sv: {
     lang: 'Svenska', flag: 'se',
@@ -585,7 +620,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Avbryt', doOff: '⏻ Stäng av alla',
     overlayOn: 'PÅ', overlayOff: 'AV',
     modes: { cool:'Kyla', heat:'Värme', dry:'Avfuktning', fan_only:'Fläkt', off:'Av' },
-    fans:   ['Auto','Låg','Medel','Hög'],
+    fans:   ['Auto','Min','Låg','Låg-Medel','Medel','Medel-Hög','Hög','Max'],
     swings: ['Fast','Upp/Ned','Vänster/Höger','Alla'],
     comfort: { dry:'Torr luft', fan_only:'Lätt fräsch bris', off:'För närvarande av' },
     comfortTemp: function(t) {
@@ -627,6 +662,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Stäng av alla-knapp', edShowAllOffDesc: 'Visa stäng av alla-knapp',
     edShowTimer: 'Timerknapp', edShowTimerDesc: 'Visa timerknapp',
     edShowRoomEnv: 'Rumstemperatur/Luftfuktighet', edShowRoomEnvDesc: 'Visa rumstemperatur & luftfuktighet (Super Lite)',
+    edShowSlFan: '💨 Fläkthastighet (Super Lite)', edShowSlFanDesc: 'Visa fläktknapp i Super Lite',
+    edShowSlSwing: '🔄 Luftriktning (Super Lite)', edShowSlSwingDesc: 'Visa luftriktningsknapp i Super Lite',
+    edShowSlRoomPower: '⚡ Rumseffekt (Super Lite)', edShowSlRoomPowerDesc: 'Visa elförbrukning för valt rum',
+    edPowerUnit: '⚡ Effektenhet', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Utomhustemperatur', edShowHumidity: 'Luftfuktighet', edShowPower: 'Effekt (kW)',
     edRoomCountLabel: function(n) { return '🏠 Antal rum (1–8, standard 4)'; },
     edRoomsHeader: function(n) { return '❄ Luftkonditioneringar (' + n + ' rum)'; },
@@ -637,15 +676,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ AC-entitet (climate.*)',
     edRoomTempEntity: '🌡 Rumstemperatursensor (om AC saknar det)',
     edRoomHumidityEntity: '💧 Rumsfuktighetssensor (om AC saknar det)',
+    edRoomPowerEntity: '⚡ Rumseffektsensor (sensor.*)',
     edAcName: '🏷 Visningsnamn',
-    edAcIcon: '🎨 Ikon (emoji)',
+    edAcIcon: '🎨 MDI Ikon (t.ex. mdi:sofa)',
     edAcImage: '🖼 Rumsfoto (URL)',
     edPm25: '🌫 Fint damm PM2.5',
     edOutdoorTemp: '🌡 Utomhustemperatur',
     edHumidity: '💧 Utomhusfuktighet',
     edPower: '⚡ Elförbrukning (kW)',
     rooms: ['Vardagsrum','Sovrum','Matsal','Kontor'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   hu: {
     lang: 'Magyar', flag: 'hu',
@@ -673,7 +713,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Mégse', doOff: '⏻ Mindet ki',
     overlayOn: 'BE', overlayOff: 'KI',
     modes: { cool:'Hűtés', heat:'Fűtés', dry:'Párátlanítás', fan_only:'Ventilátor', off:'Ki' },
-    fans:   ['Auto','Alacsony','Közepes','Magas'],
+    fans:   ['Auto','Min','Alacsony','Alacsony-Közepes','Közepes','Közepes-Magas','Magas','Max'],
     swings: ['Rögzített','Fel/Le','Bal/Jobb','Mindkettő'],
     comfort: { dry:'Száraz levegő', fan_only:'Könnyű friss szellő', off:'Jelenleg kikapcsolt' },
     comfortTemp: function(t) {
@@ -715,6 +755,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Mindent kikapcsol gomb', edShowAllOffDesc: 'Mindent kikapcsol gomb megjelenítése',
     edShowTimer: 'Időzítő gomb', edShowTimerDesc: 'Időzítő gomb megjelenítése',
     edShowRoomEnv: 'Szoba hőmérséklet/páratartalom', edShowRoomEnvDesc: 'Szoba hőmérséklet & páratartalom mutatása (Super Lite)',
+    edShowSlFan: '💨 Ventilátor sebesség (Super Lite)', edShowSlFanDesc: 'Ventilátor gomb mutatása Super Lite-ban',
+    edShowSlSwing: '🔄 Légáramlat (Super Lite)', edShowSlSwingDesc: 'Légáramlat gomb mutatása Super Lite-ban',
+    edShowSlRoomPower: '⚡ Szoba fogyasztás (Super Lite)', edShowSlRoomPowerDesc: 'Kiválasztott szoba fogyasztásának mutatása',
+    edPowerUnit: '⚡ Teljesítményegység', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Kültéri hőmérséklet', edShowHumidity: 'Páratartalom', edShowPower: 'Teljesítmény (kW)',
     edRoomCountLabel: function(n) { return '🏠 Szobák száma (1–8, alapértelmezett 4)'; },
     edRoomsHeader: function(n) { return '❄ Légkondicionáló (' + n + ' szoba)'; },
@@ -725,15 +769,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Légkondicionáló entitás (climate.*)',
     edRoomTempEntity: '🌡 Szobahőmérséklet-érzékelő (ha AC nem rendelkezik)',
     edRoomHumidityEntity: '💧 Szobapáratartalom-érzékelő (ha AC nem rendelkezik)',
+    edRoomPowerEntity: '⚡ Szoba fogyasztásmérő (sensor.*)',
     edAcName: '🏷 Megjelenítési név',
-    edAcIcon: '🎨 Ikon (emoji)',
+    edAcIcon: '🎨 MDI Ikon (t.ex. mdi:sofa)',
     edAcImage: '🖼 Rumsfoto (URL)',
     edPm25: '🌫 Finom por PM2.5',
     edOutdoorTemp: '🌡 Kültéri hőmérséklet',
     edHumidity: '💧 Kültéri páratartalom',
     edPower: '⚡ Energiafogyasztás (kW)',
     rooms: ['Nappali','Hálószoba','Étkező','Iroda'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   cs: {
     lang: 'Čeština', flag: 'cz',
@@ -761,7 +806,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Zrušit', doOff: '⏻ Vše vypnout',
     overlayOn: 'ZAP', overlayOff: 'VYP',
     modes: { cool:'Chlazení', heat:'Topení', dry:'Odvlhčování', fan_only:'Ventilátor', off:'Vypnout' },
-    fans:   ['Auto','Nízká','Střední','Vysoká'],
+    fans:   ['Auto','Min','Nízká','Nízká-Střední','Střední','Střední-Vysoká','Vysoká','Max'],
     swings: ['Pevný','Nahoru/Dolů','Vlevo/Vpravo','Vše'],
     comfort: { dry:'Suchý vzduch', fan_only:'Lehký svěží vánek', off:'Momentálně vypnuto' },
     comfortTemp: function(t) {
@@ -803,6 +848,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Tlačítko vše vypnout', edShowAllOffDesc: 'Zobrazit tlačítko vše vypnout',
     edShowTimer: 'Tlačítko časovače', edShowTimerDesc: 'Zobrazit tlačítko časovače',
     edShowRoomEnv: 'Teplota/vlhkost místnosti', edShowRoomEnvDesc: 'Zobrazit teplotu & vlhkost místnosti (Super Lite)',
+    edShowSlFan: '💨 Rychlost ventilátoru (Super Lite)', edShowSlFanDesc: 'Zobrazit tlačítko ventilátoru v Super Lite',
+    edShowSlSwing: '🔄 Směr vzduchu (Super Lite)', edShowSlSwingDesc: 'Zobrazit tlačítko směru v Super Lite',
+    edShowSlRoomPower: '⚡ Spotřeba místnosti (Super Lite)', edShowSlRoomPowerDesc: 'Zobrazit spotřebu vybrané místnosti',
+    edPowerUnit: '⚡ Jednotka výkonu', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Venkovní teplota', edShowHumidity: 'Vlhkost', edShowPower: 'Výkon (kW)',
     edRoomCountLabel: function(n) { return '🏠 Počet místností (1–8, výchozí 4)'; },
     edRoomsHeader: function(n) { return '❄ Klimatizace (' + n + ' místností)'; },
@@ -813,15 +862,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Entita klimatizace (climate.*)',
     edRoomTempEntity: '🌡 Senzor teploty v místnosti (pokud AC nemá)',
     edRoomHumidityEntity: '💧 Senzor vlhkosti v místnosti (pokud AC nemá)',
+    edRoomPowerEntity: '⚡ Senzor spotřeby místnosti (sensor.*)',
     edAcName: '🏷 Zobrazovaný název',
-    edAcIcon: '🎨 Ikona (emoji)',
+    edAcIcon: '🎨 MDI Ikona (np. mdi:sofa)',
     edAcImage: '🖼 Zdjęcie pokoju (URL)',
     edPm25: '🌫 Jemný prach PM2.5',
     edOutdoorTemp: '🌡 Venkovní teplota',
     edHumidity: '💧 Venkovní vlhkost',
     edPower: '⚡ Spotřeba energie (kW)',
     rooms: ['Obývací pokoj','Ložnice','Jídelna','Kancelář'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   it: {
     lang: 'Italiano', flag: 'it',
@@ -840,7 +890,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODALITÀ',
     statusLabel: 'STATO',
     statusOn: 'IN FUNZIONE', statusOff: 'SPENTO',
-    airGood: 'Qualità dell\'aria buona', pressOn: 'Premi per accendere',
+    airGood: 'Qualità dell\'aria buona', outdoorLabel: 'Outdoor', pressOn: 'Premi per accendere',
     dustLabel: 'Polvere fine',
     fanLabel: 'Velocità ventilatore', swingLabel: 'Direzione flusso',
     allOff: 'Spegni tutti', allOffSub: 'Spegni tutte le stanze',
@@ -849,7 +899,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Annulla', doOff: '⏻ Spegni tutti',
     overlayOn: 'ACCESO', overlayOff: 'SPENTO',
     modes: { cool:'Raffreddamento', heat:'Riscaldamento', dry:'Deumidificazione', fan_only:'Ventilatore', off:'Spento' },
-    fans:   ['Auto','Bassa','Media','Alta'],
+    fans:   ['Auto','Min','Bassa','Bassa-Media','Media','Media-Alta','Alta','Max'],
     swings: ['Fisso','Su/Giù','Sinistra/Destra','Tutti'],
     comfort: { dry:'Aria secca', fan_only:'Brezza leggera e fresca', off:'Attualmente spento' },
     comfortTemp: function(t) {
@@ -891,6 +941,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Pulsante spegni tutto', edShowAllOffDesc: 'Mostra pulsante spegni tutto',
     edShowTimer: 'Pulsante timer', edShowTimerDesc: 'Mostra pulsante timer',
     edShowRoomEnv: 'Temp/Umidità stanza', edShowRoomEnvDesc: 'Mostra temp. & umidità stanza (Super Lite)',
+    edShowSlFan: '💨 Velocità ventilatore (Super Lite)', edShowSlFanDesc: 'Mostra pulsante ventilatore in Super Lite',
+    edShowSlSwing: '🔄 Direzione aria (Super Lite)', edShowSlSwingDesc: 'Mostra pulsante direzione in Super Lite',
+    edShowSlRoomPower: '⚡ Consumo stanza (Super Lite)', edShowSlRoomPowerDesc: 'Mostra consumo stanza selezionata',
+    edPowerUnit: '⚡ Unità potenza', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Temperatura esterna', edShowHumidity: 'Umidità', edShowPower: 'Potenza (kW)',
     edRoomCountLabel: function(n) { return '🏠 Numero di stanze (1–8, predefinito 4)'; },
     edRoomsHeader: function(n) { return '❄ Condizionatori (' + n + ' stanze)'; },
@@ -901,15 +955,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Entità condizionatore (climate.*)',
     edRoomTempEntity: '🌡 Sensore temperatura stanza (se AC non ce l\'ha)',
     edRoomHumidityEntity: '💧 Sensore umidità stanza (se AC non ce l\'ha)',
+    edRoomPowerEntity: '⚡ Sensore potenza stanza (sensor.*)',
     edAcName: '🏷 Nome visualizzato',
-    edAcIcon: '🎨 Icona (emoji)',
+    edAcIcon: '🎨 Icona MDI (es. mdi:sofa)',
     edAcImage: '🖼 Foto stanza (URL)',
     edPm25: '🌫 Polvere fine PM2.5',
     edOutdoorTemp: '🌡 Temperatura esterna',
     edHumidity: '💧 Umidità esterna',
     edPower: '⚡ Consumo energetico (kW)',
     rooms: ['Soggiorno','Camera da letto','Sala da pranzo','Ufficio'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
   pt: {
     lang: 'Português', flag: 'pt',
@@ -928,7 +983,7 @@ const AC_TRANSLATIONS = {
     modeLabel: 'MODO',
     statusLabel: 'ESTADO',
     statusOn: 'A FUNCIONAR', statusOff: 'DESLIGADO',
-    airGood: 'Qualidade do ar boa', pressOn: 'Prima para ligar',
+    airGood: 'Qualidade do ar boa', outdoorLabel: 'Outdoor', pressOn: 'Prima para ligar',
     dustLabel: 'Pó fino',
     fanLabel: 'Velocidade do ventilador', swingLabel: 'Direção do fluxo',
     allOff: 'Desligar todos', allOffSub: 'Desligar todas as salas',
@@ -937,7 +992,7 @@ const AC_TRANSLATIONS = {
     cancel: 'Cancelar', doOff: '⏻ Desligar todos',
     overlayOn: 'LIGADO', overlayOff: 'DESLIGADO',
     modes: { cool:'Arrefecer', heat:'Aquecer', dry:'Desumidificar', fan_only:'Ventilador', off:'Desligado' },
-    fans:   ['Auto','Baixo','Médio','Alto'],
+    fans:   ['Auto','Min','Baixo','Baixo-Médio','Médio','Médio-Alto','Alto','Max'],
     swings: ['Fixo','Cima/Baixo','Esquerda/Direita','Todos'],
     comfort: { dry:'Ar seco e confortável', fan_only:'Brisa leve e fresca', off:'Atualmente desligado' },
     comfortTemp: function(t) {
@@ -979,6 +1034,10 @@ const AC_TRANSLATIONS = {
     edShowAllOff: 'Botão desligar tudo', edShowAllOffDesc: 'Mostrar botão desligar tudo',
     edShowTimer: 'Botão temporizador', edShowTimerDesc: 'Mostrar botão temporizador',
     edShowRoomEnv: 'Temp/Humidade do quarto', edShowRoomEnvDesc: 'Mostrar temp. & humidade do quarto (Super Lite)',
+    edShowSlFan: '💨 Velocidade do ventilador (Super Lite)', edShowSlFanDesc: 'Mostrar botão ventilador em Super Lite',
+    edShowSlSwing: '🔄 Direção do ar (Super Lite)', edShowSlSwingDesc: 'Mostrar botão de direção em Super Lite',
+    edShowSlRoomPower: '⚡ Consumo sala (Super Lite)', edShowSlRoomPowerDesc: 'Mostrar consumo da sala selecionada',
+    edPowerUnit: '⚡ Unidade de potência', edPowerUnitKw: 'kW', edPowerUnitW: 'W',
     edShowOutdoorTemp: 'Temperatura externa', edShowHumidity: 'Humidade', edShowPower: 'Potência (kW)',
     edRoomCountLabel: function(n) { return '🏠 Número de salas (1–8, padrão 4)'; },
     edRoomsHeader: function(n) { return '❄ Ar Condicionados (' + n + ' salas)'; },
@@ -989,15 +1048,16 @@ const AC_TRANSLATIONS = {
     edAcEntity: '❄ Entidade AC (climate.*)',
     edRoomTempEntity: '🌡 Sensor temperatura sala (se AC não tiver)',
     edRoomHumidityEntity: '💧 Sensor humidade sala (se AC não tiver)',
+    edRoomPowerEntity: '⚡ Sensor consumo sala (sensor.*)',
     edAcName: '🏷 Nome exibido',
-    edAcIcon: '🎨 Ícone (emoji)',
+    edAcIcon: '🎨 Ícone MDI (ex: mdi:sofa)',
     edAcImage: '🖼 Foto do quarto (URL)',
     edPm25: '🌫 Pó fino PM2.5',
     edOutdoorTemp: '🌡 Temperatura exterior',
     edHumidity: '💧 Humidade exterior',
     edPower: '⚡ Consumo de energia (kW)',
     rooms: ['Sala de estar','Quarto','Sala de jantar','Escritório'],
-    roomIcons: ['🛋','🛌','🍳','💼'],
+    roomIcons: ['mdi:sofa','mdi:bed','mdi:silverware-fork-knife','mdi:briefcase'],
   },
 };
 
@@ -1018,10 +1078,14 @@ const AC_BG_PRESETS = [
   { id: 'slate',   label: 'Slate',    c1: '#101820', c2: '#445566' },
   { id: 'rose',    label: 'Rose',     c1: '#1a0808', c2: '#ee6688' },
   { id: 'teal',    label: 'Teal',     c1: '#001818', c2: '#00aa88' },
+  { id: 'deep_neon', label: '🔵 Deep Neon', c1: '#020b18', c2: '#00d4ff' },
   { id: 'custom',  label: '✏ Custom', c1: null,      c2: null       },
 ];
 
 function acPresetGradient(preset, c1, c2) {
+  if (preset === 'deep_neon') {
+    return 'linear-gradient(160deg, #020b18 0%, #041428 30%, #061c35 60%, #030e1f 100%)';
+  }
   const p = AC_BG_PRESETS.find(x => x.id === preset) || AC_BG_PRESETS[0];
   const gc1 = (preset === 'custom' ? c1 : p.c1) || '#001e2b';
   const gc2 = (preset === 'custom' ? c2 : p.c2) || '#12c6f3';
@@ -1073,14 +1137,14 @@ const ROOM_IMAGES = [
 ];
 
 const ROOMS_DEFAULT = [
-  { id: 'climate.dieu_hoa_living',         label: 'Ph\xf2ng kh\xe1ch', area: '25 m\xb2', icon: '\ud83d\udecb' },
-  { id: 'climate.bed_air_conditioning',     label: 'Ph\xf2ng ng\u1ee7',  area: '18 m\xb2', icon: '\ud83d\udecc' },
-  { id: 'climate.kitchen_air_conditioning', label: 'Ph\xf2ng \u0103n',   area: '20 m\xb2', icon: '\ud83c\udf73' },
-  { id: 'climate.dieu_hoa_office',          label: 'V\u0103n ph\xf2ng',  area: '15 m\xb2', icon: '\ud83d\udcbc' },
-  { id: 'climate.dieu_hoa_bathroom',        label: 'Ph\xf2ng t\u1eafm',  area: '8 m\xb2',  icon: '\ud83d\udec1' },
-  { id: 'climate.dieu_hoa_kids',            label: 'Ph\xf2ng tr\u1ebb',  area: '14 m\xb2', icon: '\ud83e\uddf8' },
-  { id: 'climate.dieu_hoa_gym',             label: 'Ph\xf2ng gym',       area: '20 m\xb2', icon: '\ud83c\udfcb' },
-  { id: 'climate.dieu_hoa_utility',         label: 'Kho',                area: '10 m\xb2', icon: '\ud83d\udce6' },
+  { id: 'climate.dieu_hoa_living',         label: 'Ph\xf2ng kh\xe1ch', area: '25 m\xb2', icon: 'mdi:sofa' },
+  { id: 'climate.bed_air_conditioning',     label: 'Ph\xf2ng ng\u1ee7',  area: '18 m\xb2', icon: 'mdi:bed' },
+  { id: 'climate.kitchen_air_conditioning', label: 'Ph\xf2ng \u0103n',   area: '20 m\xb2', icon: 'mdi:silverware-fork-knife' },
+  { id: 'climate.dieu_hoa_office',          label: 'V\u0103n ph\xf2ng',  area: '15 m\xb2', icon: 'mdi:briefcase' },
+  { id: 'climate.dieu_hoa_bathroom',        label: 'Ph\xf2ng t\u1eafm',  area: '8 m\xb2',  icon: 'mdi:shower' },
+  { id: 'climate.dieu_hoa_kids',            label: 'Ph\xf2ng tr\u1ebb',  area: '14 m\xb2', icon: 'mdi:teddy-bear' },
+  { id: 'climate.dieu_hoa_gym',             label: 'Ph\xf2ng gym',       area: '20 m\xb2', icon: 'mdi:dumbbell' },
+  { id: 'climate.dieu_hoa_utility',         label: 'Kho',                area: '10 m\xb2', icon: 'mdi:archive' },
 ];
 var ROOMS = ROOMS_DEFAULT.slice(0, 4);
 
@@ -1094,15 +1158,15 @@ const GREET = function() {
 };
 
 const MODE_CFG = {
-  cool:     { lbl: 'L\xe0m l\u1ea1nh', icon: '\u2744',      color: '#3b9eff', glow: 'rgba(59,158,255,0.55)'   },
+  cool:     { lbl: 'L\xe0m l\u1ea1nh', icon: 'mdi:snowflake',      color: '#3b9eff', glow: 'rgba(59,158,255,0.55)'   },
   heat:     { lbl: 'S\u01b0\u1edfi',   icon: '\ud83d\udd25', color: '#ff7b3b', glow: 'rgba(255,123,59,0.55)'  },
   dry:      { lbl: 'H\xfat \u1ea9m',   icon: '\ud83d\udca7', color: '#a78bfa', glow: 'rgba(167,139,250,0.55)' },
   fan_only: { lbl: 'Qu\u1ea1t',        icon: '\ud83c\udf2c', color: '#34d399', glow: 'rgba(52,211,153,0.55)'  },
   off:      { lbl: 'T\u1eaft',         icon: '\u25cb',       color: '#4b5563', glow: 'rgba(75,85,99,0.3)'     },
 };
 
-const FAN_LEVELS  = ['auto','low','medium','high'];
-const FAN_VI      = ['T\u1ef1 \u0111\u1ed9ng','Th\u1ea5p','V\u1eeba','Cao'];
+const FAN_LEVELS  = ['auto','min','low','low_mid','medium','high_mid','high','max'];
+const FAN_VI      = ['Tự động','Min','Thấp','Thấp-Vừa','Vừa','Vừa-Cao','Cao','Max'];
 const SWING_LEVELS = ['off','vertical','horizontal','both'];
 const SWING_VI    = ['C\u1ed1 \u0111\u1ecbnh','L\u00ean xu\u1ed1ng','Tr\xe1i ph\u1ea3i','T\u1ea5t c\u1ea3'];
 const SWING_ICONS  = ['\u2014','\u2195','\u2194','\u2716'];
@@ -1132,9 +1196,9 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 :host{display:block;font-family:'Sora',sans-serif}
 .card{background:linear-gradient(135deg,rgba(180,220,255,0.22) 0%,rgba(120,200,220,0.18) 50%,rgba(100,180,210,0.22) 100%);
   backdrop-filter:blur(28px) saturate(1.6);-webkit-backdrop-filter:blur(28px) saturate(1.6);
-  border-radius:28px;overflow:hidden;display:flex;align-items:stretch;
+  border-radius:28px;overflow:hidden;display:flex;align-items:stretch;width:100%;box-sizing:border-box;
   box-shadow:0 0 0 1px rgba(255,255,255,0.28),0 40px 120px rgba(0,0,0,0.35),inset 0 1px 0 rgba(255,255,255,0.45)}
-.left{flex:1.2;background:linear-gradient(160deg,rgba(200,235,255,0.18) 0%,rgba(140,210,230,0.12) 100%);
+.left{flex:1.22;background:linear-gradient(160deg,rgba(200,235,255,0.18) 0%,rgba(140,210,230,0.12) 100%);
   display:flex;flex-direction:column;padding:16px 16px 14px;gap:8px;
   position:relative;border-right:1px solid rgba(255,255,255,0.2);overflow-x:hidden;overflow-y:visible}
 .left::before{content:"";position:absolute;top:-120px;left:-70px;width:380px;height:380px;
@@ -1146,6 +1210,15 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .hdr-title{font-size:11px;font-weight:600;letter-spacing:2px;color:rgba(255,255,255,0.85);text-transform:uppercase}
 .hdr-sub{font-size:9px;color:rgba(40,80,110,0.5);margin-top:1px}
 .hdr-icons{display:flex;gap:12px;align-items:center}
+.hdr-vs-row{display:flex;align-items:center;gap:3px}
+.hdr-view-switcher{display:flex;align-items:center;gap:3px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:3px 4px}
+.hdr-vs-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:5px 8px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.4);transition:all 0.2s;line-height:0;display:flex;align-items:center;justify-content:center}
+.hdr-vs-btn:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.25)}
+.hdr-vs-btn--active{background:rgba(255,255,255,0.18)!important;color:#ffffff!important;border-color:rgba(255,255,255,0.3)!important;box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+.sl-view-switcher{display:flex;align-items:center;justify-content:flex-end;gap:3px;margin-top:4px;margin-bottom:-2px}
+.sl-vs-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:5px 8px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.4);transition:all 0.2s;line-height:0;display:flex;align-items:center;justify-content:center}
+.sl-vs-btn:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.25)}
+.sl-vs-btn--active{background:rgba(255,255,255,0.18)!important;color:#ffffff!important;border-color:rgba(255,255,255,0.3)!important;box-shadow:0 1px 6px rgba(0,0,0,0.3)}
 .greet-row{display:flex;align-items:flex-start;justify-content:space-between}
 .greet-sub{font-size:11.5px;color:rgba(255,255,255,0.65);font-weight:300}
 .greet-name{font-size:22px;font-weight:700;color:#ffffff;line-height:1.15;letter-spacing:-0.5px}
@@ -1171,6 +1244,17 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .dial-feel{font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px;font-weight:300;text-align:center;
   max-width:130px;line-height:1.45;word-break:break-word;white-space:normal}
 .temp-ctrl{display:flex;align-items:center;justify-content:center}
+.eta-bar{display:flex;align-items:center;justify-content:center;gap:5px;
+  padding:5px 12px;border-radius:20px;
+  background:rgba(59,158,255,0.10);border:1px solid rgba(59,158,255,0.25);
+  font-size:10px;font-weight:600;color:rgba(180,220,255,0.92);
+  letter-spacing:0.2px;text-align:center;animation:etaFadeIn 0.5s ease}
+@keyframes etaFadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.eta-bar-sl{display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:4px 10px;border-radius:16px;
+  background:rgba(59,158,255,0.10);border:1px solid rgba(59,158,255,0.22);
+  font-size:9.5px;font-weight:600;color:rgba(180,220,255,0.88);
+  letter-spacing:0.2px;text-align:center;animation:etaFadeIn 0.5s ease}
 .temp-btn{width:40px;height:40px;border-radius:50%;background:rgba(0,20,50,0.25);
   border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.9);font-size:24px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;outline:none;transition:all 0.15s;font-family:'Sora',sans-serif}
@@ -1181,14 +1265,48 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .mode-btn{background:rgba(0,20,50,0.3);border:1px solid rgba(255,255,255,0.25);border-radius:13px;
   padding:9px 3px 7px;display:flex;flex-direction:column;align-items:center;gap:4px;
   cursor:pointer;outline:none;color:rgba(255,255,255,0.75);font-size:8.5px;font-weight:600;
-  font-family:'Sora',sans-serif;transition:all 0.2s}
-.mode-btn:hover{background:rgba(0,30,70,0.45);border-color:rgba(255,255,255,0.5);transform:translateY(-1px)}
-.mode-btn:active{transform:scale(0.94)}
+  font-family:'Sora',sans-serif;transition:all 0.22s cubic-bezier(.34,1.56,.64,1);overflow:hidden;position:relative}
+.mode-btn:hover{transform:translateY(-2px) scale(1.04);border-color:rgba(255,255,255,0.55);z-index:2}
+.mode-btn:active{transform:scale(0.93)}
 .mode-btn--active{background:linear-gradient(160deg,color-mix(in srgb,var(--bc,var(--accent)) 55%,rgba(0,15,40,0.5)),color-mix(in srgb,var(--bc,var(--accent)) 35%,rgba(0,15,40,0.4)));
   border-color:color-mix(in srgb,var(--bc,var(--accent)) 80%,transparent);color:#ffffff;
   box-shadow:0 0 24px var(--bg,var(--glow)),inset 0 1px 0 rgba(255,255,255,0.25)}
-.mode-icon{font-size:22px;line-height:1}
+.mode-icon{font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;
+  transition:transform 0.25s ease,filter 0.25s ease}
 .mode-lbl{font-size:8.5px}
+
+/* ── Hover: Cool — bông tuyết xoay + sáng ── */
+@keyframes modeCoolSpin{0%{transform:rotate(0deg) scale(1)}50%{transform:rotate(180deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}
+@keyframes modeCoolGlow{0%,100%{filter:drop-shadow(0 0 4px #3b9eff)}50%{filter:drop-shadow(0 0 12px #3b9eff) drop-shadow(0 0 22px #a8d8ff)}}
+.mode-btn[data-hvac="cool"]:hover .mode-icon{animation:modeCoolSpin 1.1s linear infinite,modeCoolGlow 1.1s ease-in-out infinite}
+.mode-btn[data-hvac="cool"]:hover{background:rgba(20,60,120,0.5);border-color:#3b9eff;box-shadow:0 4px 20px rgba(59,158,255,0.35),inset 0 0 14px rgba(59,158,255,0.1)}
+
+/* ── Hover: Heat — lửa nhảy múa ── */
+@keyframes modeHeatFlicker{0%{transform:scale(1) rotate(-3deg)}20%{transform:scale(1.18) rotate(2deg)}40%{transform:scale(1.08) rotate(-2deg)}60%{transform:scale(1.22) rotate(3deg)}80%{transform:scale(1.1) rotate(-1deg)}100%{transform:scale(1) rotate(-3deg)}}
+@keyframes modeHeatGlow{0%,100%{filter:drop-shadow(0 0 5px #ff7b3b)}50%{filter:drop-shadow(0 0 14px #ff7b3b) drop-shadow(0 0 26px #ffcc44)}}
+.mode-btn[data-hvac="heat"]:hover .mode-icon{animation:modeHeatFlicker 0.7s ease-in-out infinite,modeHeatGlow 0.7s ease-in-out infinite}
+.mode-btn[data-hvac="heat"]:hover{background:rgba(80,30,10,0.5);border-color:#ff7b3b;box-shadow:0 4px 20px rgba(255,123,59,0.4),inset 0 0 14px rgba(255,123,59,0.12)}
+
+/* ── Hover: Dry — giọt nước nảy lên xuống ── */
+@keyframes modeDryBounce{0%,100%{transform:translateY(0) scale(1)}30%{transform:translateY(-5px) scale(0.92)}60%{transform:translateY(2px) scale(1.1)}80%{transform:translateY(-2px) scale(0.97)}}
+@keyframes modeDryGlow{0%,100%{filter:drop-shadow(0 0 4px #a78bfa)}50%{filter:drop-shadow(0 0 12px #a78bfa) drop-shadow(0 0 20px #d8b4fe)}}
+.mode-btn[data-hvac="dry"]:hover .mode-icon{animation:modeDryBounce 1s ease-in-out infinite,modeDryGlow 1s ease-in-out infinite}
+.mode-btn[data-hvac="dry"]:hover{background:rgba(50,20,90,0.5);border-color:#a78bfa;box-shadow:0 4px 20px rgba(167,139,250,0.35),inset 0 0 14px rgba(167,139,250,0.1)}
+
+/* ── Hover: Fan — gió thổi sang phải (shake ngang) ── */
+@keyframes modeFanBlow{0%{transform:translateX(0) rotate(0deg)}15%{transform:translateX(3px) rotate(8deg)}30%{transform:translateX(-1px) rotate(-4deg)}50%{transform:translateX(4px) rotate(10deg)}70%{transform:translateX(-2px) rotate(-5deg)}85%{transform:translateX(3px) rotate(6deg)}100%{transform:translateX(0) rotate(0deg)}}
+@keyframes modeFanGlow{0%,100%{filter:drop-shadow(0 0 4px #34d399)}50%{filter:drop-shadow(0 0 12px #34d399) drop-shadow(0 0 22px #6ee7b7)}}
+.mode-btn[data-hvac="fan_only"]:hover .mode-icon{animation:modeFanBlow 0.9s ease-in-out infinite,modeFanGlow 0.9s ease-in-out infinite}
+.mode-btn[data-hvac="fan_only"]:hover{background:rgba(10,60,40,0.5);border-color:#34d399;box-shadow:0 4px 20px rgba(52,211,153,0.35),inset 0 0 14px rgba(52,211,153,0.1)}
+
+/* ── Hover: dial-temp — phóng to + sáng rực ── */
+@keyframes dialTempPulse{0%,100%{filter:brightness(1) drop-shadow(0 0 8px currentColor)}50%{filter:brightness(1.3) drop-shadow(0 0 22px currentColor) drop-shadow(0 0 40px currentColor)}}
+.dial-temp{font-size:44px;transition:transform 0.25s cubic-bezier(.34,1.56,.64,1),filter 0.25s ease;cursor:default}
+.dial-center:hover .dial-temp,.dial-wrap:hover .dial-temp{transform:scale(1.18);animation:dialTempPulse 1.4s ease-in-out infinite}
+.sl-temp-val{transition:transform 0.25s cubic-bezier(.34,1.56,.64,1),filter 0.25s ease;cursor:default}
+.sl-dial-center:hover .sl-temp-val,.sl-dial-wrap:hover .sl-temp-val{transform:scale(1.18);animation:dialTempPulse 1.4s ease-in-out infinite}
+/* ha-icon bên trong mode-icon inherit animation từ parent */
+.mode-icon ha-icon,.mode-icon>*{pointer-events:none;display:inline-flex;}
 .fan-swing-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .fan-card,.swing-card{background:rgba(0,20,50,0.28);border:1px solid rgba(255,255,255,0.22);
   border-radius:14px;padding:9px 12px;display:flex;flex-direction:column;gap:6px}
@@ -1243,7 +1361,7 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
   border-radius:10px;padding:9px;font-size:10px;font-weight:700;font-family:'Sora',sans-serif;
   color:#ff6b6b;cursor:pointer;outline:none;touch-action:manipulation}
 .pw-arrow{color:rgba(255,255,255,0.4);font-size:20px}
-.right{flex:1.4;background:linear-gradient(160deg,rgba(160,220,240,0.10) 0%,rgba(100,180,210,0.08) 100%);display:flex;flex-direction:column;position:relative;overflow-x:hidden;overflow-y:visible;min-height:0}
+.right{flex:1;background:linear-gradient(160deg,rgba(160,220,240,0.10) 0%,rgba(100,180,210,0.08) 100%);display:flex;flex-direction:column;position:relative;overflow-x:hidden;overflow-y:visible;min-height:0}
 .right--lite{flex:0 0 45%;min-width:0;max-width:none}
 .left--lite{flex:0 0 55%}
 .card--lite{min-height:0 !important}
@@ -1347,12 +1465,32 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .timer-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   background:rgba(0,20,50,0.3);border:1px solid rgba(255,255,255,0.22);border-radius:18px;
   padding:10px 8px;cursor:pointer;outline:none;font-family:'Sora',sans-serif;
-  transition:all 0.2s;flex:1;min-width:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-.timer-btn:hover{background:rgba(0,30,70,0.45);border-color:rgba(251,191,36,0.45)}
+  transition:all 0.2s;flex:1;min-width:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;position:relative;overflow:visible}
+@keyframes timerShake{0%,100%{transform:rotate(0deg) scale(1)}8%{transform:rotate(-18deg) scale(1.12)}16%{transform:rotate(16deg) scale(1.12)}24%{transform:rotate(-12deg) scale(1.08)}32%{transform:rotate(10deg) scale(1.06)}40%{transform:rotate(-6deg) scale(1.03)}50%{transform:rotate(5deg) scale(1.02)}60%,100%{transform:rotate(0deg) scale(1)}}
+@keyframes timerGlow{0%,100%{filter:drop-shadow(0 0 3px rgba(251,191,36,0.4))}50%{filter:drop-shadow(0 0 10px rgba(251,191,36,0.9)) drop-shadow(0 0 20px rgba(251,191,36,0.5))}}
+.timer-btn:hover{background:rgba(20,15,0,0.5);border-color:rgba(251,191,36,0.6);box-shadow:0 4px 18px rgba(251,191,36,0.25),inset 0 0 12px rgba(251,191,36,0.07)}
+.timer-btn:hover .timer-ico{animation:timerShake 0.9s ease-in-out infinite,timerGlow 0.9s ease-in-out infinite;display:inline-block}
 .timer-btn--active{border-color:rgba(251,191,36,0.75)!important;background:rgba(251,191,36,0.12)!important;box-shadow:0 0 14px rgba(251,191,36,0.2)}
-.timer-ico{font-size:18px;line-height:1;pointer-events:none}
+.timer-ico{font-size:18px;line-height:1;pointer-events:none;transition:filter 0.2s}
 .timer-lbl{font-size:7px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.5);text-transform:uppercase;pointer-events:none}
 .timer-cd{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:600;color:rgba(251,191,36,0.9);line-height:1;min-height:13px;pointer-events:none}
+
+/* ── Room tab tooltip ── */
+.room-tab{position:relative}
+/* Tooltip được inject vào document.body qua JS — dùng position:fixed để thoát khỏi overflow:hidden */
+.ac-room-tip{position:fixed;z-index:99999;pointer-events:none;
+  background:rgba(6,10,28,0.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,0.14);border-radius:12px;
+  padding:8px 13px;max-width:240px;white-space:normal;line-height:1.5;
+  font-size:10.5px;font-weight:500;font-family:'Sora',sans-serif;
+  box-shadow:0 4px 24px rgba(0,0,0,0.65),inset 0 1px 0 rgba(255,255,255,0.08);
+  opacity:0;transition:opacity 0.15s ease,transform 0.15s ease;
+  transform:translateX(-4px)}
+.ac-room-tip.tip-visible{opacity:1;transform:translateX(0)}
+.ac-room-tip::before{content:'';position:absolute;right:100%;top:50%;transform:translateY(-50%);
+  border:6px solid transparent;border-right-color:rgba(255,255,255,0.14)}
+.ac-room-tip::after{content:'';position:absolute;right:100%;top:50%;transform:translateY(-50%);
+  border:5px solid transparent;border-right-color:rgba(6,10,28,0.97);margin-right:-1px}
 .timer-popup{position:fixed;z-index:9999;
   background:rgba(6,10,24,0.98);backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);
   border:1px solid rgba(255,255,255,0.18);border-radius:20px;padding:15px 13px 13px;width:218px;
@@ -1398,44 +1536,51 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .room-tab--active.room-tab--on{background:rgba(0,40,80,0.55)!important;border-color:color-mix(in srgb,var(--accent) 70%,transparent)!important;box-shadow:0 0 14px color-mix(in srgb,var(--accent) 30%,transparent)}
 .room-tab--active.room-tab--off{background:rgba(30,20,50,0.55)!important;border-color:rgba(251,191,36,0.5)!important}
 .room-tab--running{border-color:color-mix(in srgb,var(--accent) 35%,rgba(255,255,255,0.2))!important}
-.room-tab-ico{font-size:20px;line-height:1;flex-shrink:0;width:24px;text-align:center}
+.room-tab-ico{font-size:20px;line-height:1;flex-shrink:0;width:24px;text-align:center;display:flex;align-items:center;justify-content:center}
 .room-tab-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .room-tab-name{font-size:12px;font-weight:600;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .room-tab-temp{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:600;color:rgba(255,255,255,0.5)}
 
 /* ── Super Lite mode ─────────────────────────────────────────────────────── */
-.card--super-lite{display:flex;flex-direction:column;border-radius:22px;min-height:0}
+.card--super-lite{display:flex;flex-direction:column;border-radius:22px;min-height:0;width:100%;box-sizing:border-box}
 .sl-body{display:flex;flex-direction:column;padding:12px 14px 14px;gap:10px}
-.sl-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px;gap:8px}
-.sl-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.8)}
+.sl-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.sl-title{font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.9)}
 .sl-badge{display:flex;align-items:center;gap:5px;background:rgba(0,20,50,0.32);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:3px 10px 3px 6px}
 .sl-led{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .sl-led-on{background:#34d399;box-shadow:0 0 8px #34d399;animation:blink 2.5s infinite}
 .sl-led-off{background:#4b5563}
 .sl-badge-txt{font-size:9px;font-weight:700;color:rgba(255,255,255,0.85);letter-spacing:1px}
-.sl-dial-wrap{display:flex;justify-content:center;position:relative;margin:-4px 0 -8px}
-.sl-dial-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-26%);
+.sl-dial-wrap{display:flex;justify-content:center;position:relative;margin:-4px 0 -8px;transform:scale(1.12);transform-origin:center top}
+.sl-dial-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-46%);
   display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;width:130px}
 .sl-temp-lbl{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);font-weight:500}
 .sl-temp-val{font-family:'Orbitron',sans-serif;font-size:40px;font-weight:800;line-height:1;transition:color 0.6s ease}
 .sl-temp-feel{font-size:10px;color:rgba(255,255,255,0.55);margin-top:4px;font-weight:300;text-align:center;max-width:120px;line-height:1.4}
-.sl-temp-ctrl{display:flex;align-items:center;justify-content:center;gap:6px}
-.sl-extra-btn{display:flex;flex-direction:column;align-items:center;gap:2px;
-  background:rgba(0,20,50,0.28);border:1px solid rgba(255,255,255,0.18);border-radius:12px;
-  padding:6px 8px;cursor:pointer;outline:none;min-width:54px;transition:all 0.15s;font-family:'Sora',sans-serif}
-.sl-extra-btn:hover{background:rgba(0,30,70,0.45);border-color:var(--accent)}
-.sl-extra-btn:active{transform:scale(0.92)}
-.sl-extra-lbl{font-size:8px;font-weight:600;color:rgba(255,255,255,0.7);white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;max-width:56px;text-transform:capitalize}
+.sl-temp-ctrl{display:flex;align-items:center;justify-content:center;gap:0}
 .sl-temp-btn{width:36px;height:36px;border-radius:50%;background:rgba(0,20,50,0.28);
   border:1px solid rgba(255,255,255,0.22);color:rgba(255,255,255,0.9);font-size:22px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;outline:none;transition:all 0.15s;font-family:'Sora',sans-serif}
 .sl-temp-btn:hover{background:rgba(0,30,70,0.45);border-color:var(--accent);color:var(--accent)}
 .sl-temp-btn:active{transform:scale(0.88)}
 .sl-temp-set{min-width:88px;text-align:center;font-family:'Orbitron',sans-serif;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85)}
-.sl-controls{display:flex;gap:8px}
+.sl-controls{display:flex;gap:8px;align-items:stretch}
+.sl-controls--compact .sl-mode-wrap{flex:0 0 30%;min-width:0;position:relative}
+.sl-controls--compact .sl-room-wrap{flex:1 1 0;min-width:0;position:relative}
 .sl-mode-wrap{flex:0 0 30%;min-width:0;position:relative}
-.sl-room-wrap{flex:0 0 calc(70% - 8px);min-width:0;position:relative}
+.sl-room-wrap{flex:1 1 0;min-width:0;position:relative}
+.sl-fanswing-wrap{display:flex;flex-direction:column;gap:5px;flex:0 0 calc(30% - 8px);min-width:0;align-self:stretch}
+.sl-mini-btn{width:100%;background:rgba(0,20,50,0.45);border:1px solid rgba(255,255,255,0.22);border-radius:10px;
+  color:#fff;font-family:'Sora',sans-serif;font-size:10px;font-weight:600;
+  padding:0 8px;cursor:pointer;outline:none;display:flex;align-items:center;justify-content:space-between;gap:4px;
+  transition:all 0.2s;white-space:nowrap;overflow:hidden;box-sizing:border-box;flex:1;min-height:28px}
+.sl-mini-btn--inline{width:auto;flex:0 0 auto;min-width:0;max-width:72px;height:28px;border-radius:50px;padding:0 8px;justify-content:center;gap:3px;font-size:9px}
+.sl-mini-btn--inline.sl-fan-inline{margin-right:6px}
+.sl-mini-btn--inline.sl-swing-inline{margin-left:6px}
+.sl-mini-btn:hover{border-color:rgba(255,255,255,0.45);background:rgba(0,30,70,0.55)}
+.sl-mini-btn:active{transform:scale(0.94)}
+.sl-mini-btn-ico{font-size:13px;line-height:1;flex-shrink:0}
+.sl-mini-btn-val{flex:1;overflow:hidden;text-overflow:ellipsis;text-align:right;opacity:0.8}
 .sl-select{width:100%;background:rgba(0,20,50,0.45);border:1px solid rgba(255,255,255,0.22);border-radius:12px;
   color:#ffffff;font-family:'Sora',sans-serif;font-size:11px;font-weight:600;
   padding:10px 10px 10px 10px;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;
@@ -1518,6 +1663,122 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .sl-room-item-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;flex-shrink:0;letter-spacing:0.5px}
 .sl-room-item-badge.on{background:rgba(52,211,153,0.2);color:#34d399;box-shadow:0 0 8px rgba(52,211,153,0.3)}
 .sl-room-item-badge.off{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.35)}
+
+
+/* ======================================================
+   DEEP NEON THEME  -  modern, layered, glassmorphism
+   ====================================================== */
+.card--deep-neon{
+  background:linear-gradient(160deg,#020b18 0%,#041428 35%,#061c35 65%,#030e1f 100%) !important;
+  border:1px solid rgba(0,180,255,0.18) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,212,255,0.12),
+    0 0 40px rgba(0,120,220,0.18),
+    0 40px 120px rgba(0,0,0,0.6),
+    inset 0 1px 0 rgba(0,212,255,0.15),
+    inset 0 -1px 0 rgba(0,80,180,0.08) !important;
+  position:relative;overflow:hidden;
+}
+.card--deep-neon .left{
+  background:linear-gradient(160deg,rgba(0,30,70,0.55) 0%,rgba(0,15,45,0.35) 100%) !important;
+  border-right:1px solid rgba(0,180,255,0.14) !important;
+}
+.card--deep-neon .left::before{
+  background:radial-gradient(circle,rgba(0,180,255,0.18) 0%,transparent 65%) !important;
+  opacity:0.8 !important;
+  width:500px !important;height:500px !important;
+}
+.card--deep-neon .hdr-ico{
+  background:linear-gradient(135deg,rgba(0,180,255,0.9),rgba(0,80,200,0.8)) !important;
+  box-shadow:0 4px 24px rgba(0,180,255,0.5),0 0 40px rgba(0,120,255,0.25) !important;
+}
+.card--deep-neon .hdr-title{color:rgba(180,230,255,0.95) !important;letter-spacing:2.5px}
+.card--deep-neon .greet-name{
+  color:#ffffff !important;
+  text-shadow:0 0 20px rgba(0,200,255,0.5),0 0 40px rgba(0,150,255,0.25);
+}
+.card--deep-neon .dial-wrap{filter:drop-shadow(0 0 24px rgba(0,180,255,0.3))}
+.card--deep-neon .sl-dial-wrap{filter:drop-shadow(0 0 24px rgba(0,180,255,0.3))}
+.card--deep-neon .dial-temp,.card--deep-neon .sl-temp-val{filter:drop-shadow(0 0 12px currentColor)}
+.card--deep-neon .temp-btn,.card--deep-neon .sl-temp-btn{
+  background:rgba(0,30,80,0.6) !important;
+  border:1px solid rgba(0,180,255,0.3) !important;
+  box-shadow:0 0 10px rgba(0,120,255,0.15);
+}
+.card--deep-neon .temp-btn:hover,.card--deep-neon .sl-temp-btn:hover{
+  background:rgba(0,60,140,0.7) !important;
+  border-color:rgba(0,212,255,0.7) !important;
+  box-shadow:0 0 20px rgba(0,180,255,0.4) !important;
+}
+.card--deep-neon .mode-btn{
+  background:rgba(0,20,60,0.55) !important;
+  border:1px solid rgba(0,160,255,0.18) !important;
+}
+.card--deep-neon .mode-btn:hover{background:rgba(0,40,100,0.7) !important;border-color:rgba(0,200,255,0.45) !important}
+.card--deep-neon .right{background:linear-gradient(160deg,rgba(0,20,55,0.45) 0%,rgba(0,10,35,0.3) 100%) !important}
+.card--deep-neon .room-image::after{
+  background:linear-gradient(to bottom,rgba(2,11,24,0.05) 0%,rgba(2,11,24,0) 15%,rgba(2,11,24,0.5) 55%,rgba(2,11,24,0.88) 78%,rgba(2,11,24,1) 100%) !important;
+}
+.card--deep-neon .status-block{background:rgba(0,20,55,0.55) !important;border:1px solid rgba(0,160,255,0.15) !important}
+.card--deep-neon .metric-chip{
+  background:rgba(0,25,65,0.7) !important;
+  border:1px solid rgba(0,180,255,0.2) !important;
+  box-shadow:0 0 8px rgba(0,100,255,0.12);
+}
+.card--deep-neon .room-tab{background:rgba(0,20,55,0.55) !important;border:1px solid rgba(0,160,255,0.12) !important}
+.card--deep-neon .room-tab--active{
+  background:rgba(0,40,100,0.65) !important;
+  border-color:rgba(0,200,255,0.4) !important;
+  box-shadow:0 0 16px rgba(0,180,255,0.2) !important;
+}
+.card--deep-neon .power-row{background:rgba(0,25,65,0.6) !important;border:1px solid rgba(0,160,255,0.18) !important}
+.card--deep-neon .eco-badge{
+  background:rgba(0,40,100,0.7) !important;
+  border:1px solid rgba(0,200,255,0.3) !important;
+  box-shadow:0 0 12px rgba(0,150,255,0.2);
+}
+.card--deep-neon .room-tabs-hdr{color:rgba(0,200,255,0.7) !important}
+.card--deep-neon .room-tabs-hdr::before,.card--deep-neon .room-tabs-hdr::after{
+  background:linear-gradient(90deg,transparent,rgba(0,180,255,0.5),transparent) !important;
+}
+.card--deep-neon .ac-overlay{
+  background:rgba(2,11,24,0.75) !important;
+  border:1px solid rgba(0,180,255,0.2) !important;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5),0 0 20px rgba(0,100,255,0.15) !important;
+}
+.card--deep-neon.card--super-lite{
+  border:1px solid rgba(0,180,255,0.2) !important;
+  box-shadow:0 0 0 1px rgba(0,212,255,0.1),0 0 60px rgba(0,100,220,0.2),0 30px 80px rgba(0,0,0,0.55),inset 0 1px 0 rgba(0,212,255,0.18) !important;
+}
+.card--deep-neon .sl-badge{background:rgba(0,25,65,0.7) !important;border:1px solid rgba(0,180,255,0.25) !important}
+.card--deep-neon .sl-select,.card--deep-neon .sl-room-btn{
+  background:rgba(0,20,60,0.65) !important;
+  border:1px solid rgba(0,160,255,0.22) !important;
+}
+.card--deep-neon .sl-select:hover,.card--deep-neon .sl-room-btn:hover{
+  background:rgba(0,40,100,0.75) !important;
+  border-color:rgba(0,212,255,0.55) !important;
+  box-shadow:0 0 14px rgba(0,180,255,0.25) !important;
+}
+.card--deep-neon .room-tabs-inner{background:rgba(0,15,45,0.55) !important;border:1px solid rgba(0,160,255,0.12) !important}
+.card--deep-neon .all-off-row{background:rgba(30,0,0,0.4) !important;border:1px solid rgba(255,80,80,0.2) !important}
+.card--deep-neon::before{
+  content:'';position:absolute;inset:0;pointer-events:none;border-radius:28px;z-index:0;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% -5%,rgba(0,180,255,0.09) 0%,transparent 65%),
+    radial-gradient(ellipse 50% 25% at 85% 105%,rgba(60,0,255,0.06) 0%,transparent 65%),
+    radial-gradient(ellipse 30% 20% at 15% 80%,rgba(0,100,255,0.05) 0%,transparent 70%);
+}
+.card--deep-neon>*{position:relative;z-index:1}
+.card--deep-neon .left::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,180,255,0.3),transparent);
+  pointer-events:none;
+}
+
+/* -- Auto-scale responsive wrapper -- */
+.card-scale-wrap{width:100%;overflow:hidden;border-radius:22px;box-sizing:border-box}
+.card-scale-wrap>.card,.card-scale-wrap>.card--super-lite{transform-origin:top left}
 `;
 
 class AcControllerCardV2 extends HTMLElement {
@@ -1527,12 +1788,30 @@ class AcControllerCardV2 extends HTMLElement {
     this._activeIdx   = 0;
     this._hass        = null;
     this._clockInt    = null;
+    this._refreshInt  = null;   // interval 10s cập nhật nhiệt độ thực tế + ETA
+    this._acTip       = null;   // tooltip element appended to document.body
     this._initialized = false;
     // timers: map roomIdx → { end, mode, hrs, int }
     this._timers           = {};
     this._outsideHandler   = null;
     this._confirmJustOpened = false;
     this._popupJustOpened  = false;
+    // Lịch sử nhiệt độ để tính tốc độ giảm: map roomIdx → [{t, temp}, ...]
+    this._tempHistory      = {};
+    // Khôi phục tempHistory từ localStorage (survive reload)
+    try {
+      var savedHist = localStorage.getItem('ac_temp_history_v2');
+      if (savedHist) {
+        var th = JSON.parse(savedHist);
+        var nowH = Date.now();
+        var selfH = this;
+        // Chỉ giữ điểm trong 30 phút gần nhất
+        Object.keys(th).forEach(function(idx) {
+          var pts = th[idx].filter(function(p) { return (nowH - p.t) < 30 * 60 * 1000; });
+          if (pts.length > 0) selfH._tempHistory[idx] = pts;
+        });
+      }
+    } catch(e) {}
     // Khôi phục timer từ localStorage sau khi reload trang
     try {
       var saved = localStorage.getItem('ac_timer_state_v2');
@@ -1590,7 +1869,77 @@ class AcControllerCardV2 extends HTMLElement {
       }
     }
 
-    if (changed) this._renderFull();
+    // FIX v1.5.1: Kiểm tra các sensor entity riêng lẻ (temp, humidity, power, outdoor, PM2.5)
+    // Trước đây bị bỏ sót → card không tự cập nhật khi sensor thay đổi, phải reload trang
+    if (!changed && prev) {
+      var cfg = this._config || {};
+      // Global sensors
+      var globalSensors = [
+        cfg.outdoor_temp_entity,
+        cfg.humidity_entity,
+        cfg.power_entity,
+        cfg.pm25_entity,
+      ];
+      for (var gi = 0; gi < globalSensors.length; gi++) {
+        var gEnt = globalSensors[gi];
+        if (gEnt) {
+          var gNew = h.states && h.states[gEnt] ? h.states[gEnt].state : null;
+          var gOld = prev.states && prev.states[gEnt] ? prev.states[gEnt].state : null;
+          if (gNew !== gOld) { changed = true; break; }
+        }
+      }
+    }
+    if (!changed && prev) {
+      // Per-room sensors (temp_entity, humidity_entity, power_entity cho mỗi phòng)
+      var ents = (this._config && this._config.entities) || [];
+      for (var ei = 0; ei < ROOMS.length && !changed; ei++) {
+        var roomSensors = [
+          ents[ei] && ents[ei].temp_entity,
+          ents[ei] && ents[ei].humidity_entity,
+          ents[ei] && ents[ei].power_entity,
+        ];
+        for (var si = 0; si < roomSensors.length; si++) {
+          var sEnt = roomSensors[si];
+          if (sEnt) {
+            var sNew = h.states && h.states[sEnt] ? h.states[sEnt].state : null;
+            var sOld = prev.states && prev.states[sEnt] ? prev.states[sEnt].state : null;
+            if (sNew !== sOld) { changed = true; break; }
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      // ── Ghi lịch sử nhiệt độ cho từng phòng ──────────────────────────────
+      var nowMs = Date.now();
+      var histDirty = false;
+      for (var ri = 0; ri < ROOMS.length; ri++) {
+        var rid = ROOMS[ri].id;
+        var rTemp = parseFloat(this._attrOf(h, rid, 'current_temperature'));
+        var rMode = this._stateOf(h, rid);
+        if (!isNaN(rTemp) && rMode === 'cool') {
+          if (!this._tempHistory[ri]) this._tempHistory[ri] = [];
+          var hist = this._tempHistory[ri];
+          var last = hist[hist.length - 1];
+          if (!last || Math.abs(last.temp - rTemp) >= 0.05 || (nowMs - last.t) >= 30000) {
+            hist.push({ t: nowMs, temp: rTemp });
+            if (hist.length > 30) hist.splice(0, hist.length - 30);
+            histDirty = true;
+          }
+        } else if (rMode !== 'cool') {
+          // Chỉ xóa nếu thực sự đã tắt/đổi mode (không xóa ngay khi mới bật)
+          if (this._tempHistory[ri] && this._tempHistory[ri].length > 0) {
+            this._tempHistory[ri] = [];
+            histDirty = true;
+          }
+        }
+      }
+      // Lưu lịch sử vào localStorage để survive reload
+      if (histDirty) {
+        try { localStorage.setItem('ac_temp_history_v2', JSON.stringify(this._tempHistory)); } catch(e) {}
+      }
+      this._renderFull();
+    }
   }
 
   // Helpers để đọc state/attr an toàn từ bất kỳ hass object nào
@@ -1601,6 +1950,60 @@ class AcControllerCardV2 extends HTMLElement {
     return hassObj && hassObj.states && hassObj.states[id] && hassObj.states[id].attributes
       ? hassObj.states[id].attributes[k]
       : null;
+  }
+
+  // ── Tính ETA làm lạnh ────────────────────────────────────────────────────
+  // Trả về { eta: số phút, rate: số, mode: 'measured'|'estimated' } hoặc null
+  _calcEta(roomIdx, setTemp, curTemp, fanMode) {
+    if (curTemp <= setTemp) return null;
+    var remaining = curTemp - setTemp;
+
+    // ── Ước tính ban đầu dựa trên fan speed (dùng ngay khi chưa có data) ──
+    // Tốc độ tiêu chuẩn: máy lạnh thông thường ~0.3–1.0°C/phút tùy fan
+    var fanRateMap = {
+      'auto': 0.55, 'min': 0.25, 'low': 0.35,
+      'low_mid': 0.45, 'medium': 0.55,
+      'high_mid': 0.70, 'high': 0.85, 'max': 1.0
+    };
+    var fm = (fanMode || 'auto').toLowerCase().replace(/[\s-]/g, '_');
+    var estimatedRate = fanRateMap[fm] || fanRateMap['auto'];
+    var etaEstimated = Math.round(remaining / estimatedRate);
+
+    // ── Tính tốc độ thực tế từ lịch sử ──────────────────────────────────
+    var hist = this._tempHistory[roomIdx];
+    if (hist && hist.length >= 2) {
+      var now = Date.now();
+      // Lấy window 8 phút gần nhất
+      var cutoff = now - 8 * 60 * 1000;
+      var pts = hist.filter(function(p) { return p.t >= cutoff; });
+      if (pts.length < 2) pts = hist.slice(-Math.min(hist.length, 6));
+
+      if (pts.length >= 2) {
+        var first = pts[0], lastPt = pts[pts.length - 1];
+        var dtMin = (lastPt.t - first.t) / 60000;
+        if (dtMin >= 0.4) {
+          var dTemp = first.temp - lastPt.temp; // dương nếu đang giảm
+          if (dTemp > 0) {
+            var measuredRate = dTemp / dtMin;
+            if (measuredRate >= 0.01) {
+              // Blend: bắt đầu từ 50% estimated → 100% measured sau 5 phút data
+              var blendFactor = Math.min(1, dtMin / 5);
+              var blendedRate = estimatedRate * (1 - blendFactor) + measuredRate * blendFactor;
+              var etaMeasured = Math.round(remaining / blendedRate);
+              if (etaMeasured > 0 && etaMeasured <= 999) {
+                return { eta: etaMeasured, rate: blendedRate, mode: blendFactor >= 0.95 ? 'measured' : 'blending' };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: ước tính ban đầu
+    if (etaEstimated > 0 && etaEstimated <= 999) {
+      return { eta: etaEstimated, rate: estimatedRate, mode: 'estimated' };
+    }
+    return null;
   }
 
   setConfig(c) {
@@ -1617,7 +2020,7 @@ class AcControllerCardV2 extends HTMLElement {
         id: 'climate.room_' + (r + 1),
         label: 'Ph\xf2ng ' + (r + 1),
         area: '15 m\xb2',
-        icon: '\u2744',
+        icon: 'mdi:snowflake',
       }));
     }
 
@@ -1649,10 +2052,10 @@ class AcControllerCardV2 extends HTMLElement {
   static getStubConfig() {
     return {
       entities: [
-        { entity_id: 'climate.dieu_hoa_living',         label: 'Phòng khách', area: '25 m²', icon: '🛋' },
-        { entity_id: 'climate.bed_air_conditioning',     label: 'Phòng ngủ',   area: '18 m²', icon: '🛌' },
-        { entity_id: 'climate.kitchen_air_conditioning', label: 'Phòng ăn',    area: '20 m²', icon: '🍳' },
-        { entity_id: 'climate.dieu_hoa_office',          label: 'Văn phòng',   area: '15 m²', icon: '💼' },
+        { entity_id: 'climate.dieu_hoa_living',         label: 'Phòng khách', area: '25 m²', icon: 'mdi:sofa' },
+        { entity_id: 'climate.bed_air_conditioning',     label: 'Phòng ngủ',   area: '18 m²', icon: 'mdi:bed' },
+        { entity_id: 'climate.kitchen_air_conditioning', label: 'Phòng ăn',    area: '20 m²', icon: 'mdi:silverware-fork-knife' },
+        { entity_id: 'climate.dieu_hoa_office',          label: 'Văn phòng',   area: '15 m²', icon: 'mdi:briefcase' },
       ],
       pm25_entity:      'sensor.pm25',
       outdoor_temp_entity: 'sensor.outdoor_temperature',
@@ -1681,6 +2084,9 @@ class AcControllerCardV2 extends HTMLElement {
     style.textContent = CARD_CSS;
     this.shadowRoot.appendChild(style);
 
+    // Khởi động interval 10s để cập nhật nhiệt độ thực tế + ETA liên tục
+    this._startRefresh();
+
     // Resume tất cả timer đang chạy (sau reload)
     var self2 = this;
     Object.keys(this._timers).forEach(function(idx) {
@@ -1689,6 +2095,85 @@ class AcControllerCardV2 extends HTMLElement {
         self2._startTick(parseInt(idx));
       }
     });
+    // -- Auto-scale: watch card width and scale down if needed --
+    var self3 = this;
+    var _scaleRafId = null;
+    var _scalePending = false;
+    function _applyScale() {
+      var wrap = self3.shadowRoot && self3.shadowRoot.getElementById('ac-scale-wrap');
+      if (!wrap) return;
+      var card = wrap.firstElementChild;
+      if (!card) return;
+      var isSL = (self3._config && self3._config.view_mode === 'super_lite');
+      var designW = isSL ? 320 : 460;
+      // Đọc availW từ self3 (host element) — KHÔNG đọc từ wrap để tránh feedback loop
+      var availW = self3.getBoundingClientRect().width || designW;
+      if (availW < 10) return;
+      if (availW >= designW) {
+        // Desktop / wide: card stretches full width, no scale
+        card.style.transform = '';
+        card.style.width = '100%';
+        card.style.minWidth = '';
+        // Chỉ xóa height nếu đang set, tránh trigger layout liên tục
+        if (wrap.style.height) wrap.style.height = '';
+      } else {
+        // Mobile / narrow: scale down proportionally
+        var scale = availW / designW;
+        var scaleStr = scale.toFixed(4);
+        // Chỉ set transform khi giá trị thực sự thay đổi để tránh nháy
+        var curTransform = card.style.transform;
+        var newTransform = 'scale(' + scaleStr + ')';
+        if (curTransform !== newTransform) {
+          card.style.transform = newTransform;
+        }
+        if (card.style.width !== designW + 'px') {
+          card.style.width = designW + 'px';
+          card.style.minWidth = designW + 'px';
+        }
+        // Tính height SAU khi transform đã set (dùng scrollHeight để không bị ảnh hưởng scale)
+        var naturalH = card.scrollHeight || card.offsetHeight;
+        var newH = Math.round(naturalH * scale) + 'px';
+        if (wrap.style.height !== newH) wrap.style.height = newH;
+      }
+    }
+    // Debounced wrapper — tránh gọi liên tục khi ResizeObserver bắn nhiều entries
+    function _scheduleScale() {
+      if (_scalePending) return;
+      _scalePending = true;
+      _scaleRafId = requestAnimationFrame(function() {
+        _scalePending = false;
+        _applyScale();
+      });
+    }
+    self3._applyScale = _applyScale;
+    self3._scheduleScale = _scheduleScale;
+    if (window.ResizeObserver) {
+      // Observe host element để lấy width container, KHÔNG observe wrap/card
+      // để tránh feedback loop: scale thay đổi height → ResizeObserver trigger lại
+      self3._scaleObs = new ResizeObserver(function(entries) {
+        // Bỏ qua nếu chỉ height thay đổi (do chính ta set wrap.style.height)
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          if (entry.contentBoxSize) {
+            var w = entry.contentBoxSize[0] ? entry.contentBoxSize[0].inlineSize : entry.contentRect.width;
+            if (w < 10) continue;
+          }
+        }
+        _scheduleScale();
+      });
+      self3._scaleObs.observe(self3);
+    }
+  }
+
+  // Render icon: nếu là 'mdi:*' → <ha-icon>, ngược lại → text span (emoji fallback)
+  // color: optional — nếu truyền vào sẽ set màu icon cụ thể, mặc định inherit
+  _mdiIcon(icon, size, color) {
+    size = size || 20;
+    var clr = color || 'inherit';
+    if (icon && icon.indexOf('mdi:') === 0) {
+      return '<ha-icon icon="' + icon + '" style="--mdc-icon-size:' + size + 'px;--mdc-icon-color:' + clr + ';width:' + size + 'px;height:' + size + 'px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;color:' + clr + '"></ha-icon>';
+    }
+    return '<span style="font-size:' + Math.round(size * 0.85) + 'px;line-height:1;vertical-align:middle;color:' + clr + '">' + (icon || '') + '</span>';
   }
 
   _arc(cx, cy, r, a1, a2) {
@@ -1706,7 +2191,9 @@ class AcControllerCardV2 extends HTMLElement {
     var lang   = cfg.language || 'vi';
     var tr     = AC_TRANSLATIONS[lang] || AC_TRANSLATIONS.vi;
     var bgGrad = acPresetGradient(cfg.background_preset, cfg.bg_color1, cfg.bg_color2);
-    var accent = cfg.accent_color || '#00ffcc';
+    var accent = (cfg.background_preset === 'deep_neon' && (!cfg.accent_color || cfg.accent_color === '#00ffcc'))
+      ? '#00d4ff'
+      : (cfg.accent_color || '#00ffcc');
     var txtClr = cfg.text_color   || '#ffffff';
 
     var room    = ROOMS[this._activeIdx];
@@ -1716,6 +2203,10 @@ class AcControllerCardV2 extends HTMLElement {
     var setTemp = parseFloat(this._a(room.id,'temperature')         || 24);
     var fanMode  = this._a(room.id,'fan_mode')     || 'auto';
     var swingMode= this._a(room.id,'swing_mode')   || 'off';
+    var supportedFanModes = (function() {
+      var raw = this._a(room.id,'fan_modes');
+      return (Array.isArray(raw) && raw.length > 0) ? raw : null;
+    }).call(this);
     var ecoOn   = this._a(room.id,'preset_mode') === 'eco';
     // Override curTemp từ cảm biến phòng nếu được cấu hình
     var roomEntCfg = (cfg.entities && cfg.entities[this._activeIdx]) || {};
@@ -1731,39 +2222,18 @@ class AcControllerCardV2 extends HTMLElement {
     }
     var roomHumidityDisplay = roomHumidityRaw > 0 ? Math.round(roomHumidityRaw) + '%' : '--';
     var isLite  = this._config.view_mode === 'lite';
-    // Đọc fan_modes từ entity, fallback FAN_LEVELS
-    var entityFanModes = this._a(room.id, 'fan_modes');
-    var actualFanModes = (Array.isArray(entityFanModes) && entityFanModes.length > 0) ? entityFanModes : FAN_LEVELS;
-    var fi  = Math.max(0, actualFanModes.indexOf(fanMode));
+    var fi  = Math.max(0, FAN_LEVELS.indexOf(fanMode));
+    // Dùng supported fan_modes thực tế để tính label; fallback về FAN_LEVELS
+    var activeFanModes = supportedFanModes || FAN_LEVELS;
     var si  = Math.max(0, SWING_LEVELS.indexOf(swingMode));
     var mode    = MODE_CFG[hvac] || MODE_CFG.cool;
     // Localise mode labels and fan/swing labels
     mode = Object.assign({}, mode, { lbl: tr.modes[hvac] || mode.lbl });
     var fanLabels   = tr.fans   || ['Auto','Low','Medium','High'];
-    // Build fan mode label map: ưu tiên translation cho FAN_LEVELS, fallback capitalize tên mode
-    var fanModeToLabel = {};
-    for (var fli = 0; fli < FAN_LEVELS.length; fli++) {
-      fanModeToLabel[FAN_LEVELS[fli]] = fanLabels[fli] || FAN_LEVELS[fli];
-    }
-    // Thêm label cho các mode entity có mà không nằm trong FAN_LEVELS
-    for (var fli2 = 0; fli2 < actualFanModes.length; fli2++) {
-      if (!fanModeToLabel[actualFanModes[fli2]]) {
-        fanModeToLabel[actualFanModes[fli2]] = actualFanModes[fli2].charAt(0).toUpperCase() + actualFanModes[fli2].slice(1);
-      }
-    }
-    var currentFanLabel = fanModeToLabel[fanMode] || fanMode;
     var swingLabels = tr.swings || ['Fixed','Up/Down','Left/Right','Both'];
-    // Label cho swing hiện tại: ưu tiên vane entity nếu có, fallback swing_mode
+    // Label cho swing hiện tại: map từ swing_mode string → label theo ngôn ngữ
     var swingModeToLabel = { off: swingLabels[0], vertical: swingLabels[1], horizontal: swingLabels[2], both: swingLabels[3] };
     var swingCurrentLabel = swingModeToLabel[swingMode] || swingMode;
-    var roomEntCfgVane = (cfg.entities && cfg.entities[this._activeIdx]) || {};
-    var vaneVertEnt = roomEntCfgVane.vane_vertical_entity || cfg.vane_vertical_entity || null;
-    var vaneHorizEnt = roomEntCfgVane.vane_horizontal_entity || cfg.vane_horizontal_entity || null;
-    if (vaneVertEnt && this._hass && this._hass.states[vaneVertEnt]) {
-      swingCurrentLabel = this._hass.states[vaneVertEnt].state;
-    } else if (vaneHorizEnt && this._hass && this._hass.states[vaneHorizEnt]) {
-      swingCurrentLabel = this._hass.states[vaneHorizEnt].state;
-    }
 
     var pct    = Math.max(0, Math.min(1, (curTemp - 16) / 16));
     var arcEnd = -140 + pct * 280;
@@ -1807,11 +2277,11 @@ class AcControllerCardV2 extends HTMLElement {
       ticks += '<line x1="' + tx1 + '" y1="' + ty1 + '" x2="' + tx2 + '" y2="' + ty2 + '" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-linecap="round"/>';
     }
 
-    // Fan bar chart — dynamic based on actual fan modes count
+    // Fan bar chart
     var barHeights = [7,10,13,16,19,22,26,30];
-    var totalFanModes = actualFanModes.length;
-    // Map current index to fill count proportionally across 8 bars
-    var fillCount = totalFanModes > 1 ? Math.round((fi / (totalFanModes - 1)) * 8) : 0;
+    // fillCount: map fan level index to number of bars filled (8 bars total)
+    var fanFillMap = [0, 1, 2, 3, 4, 5, 6, 8]; // auto,min,low,low_mid,medium,high_mid,high,max
+    var fillCount  = (fi >= 0 && fi < fanFillMap.length) ? fanFillMap[fi] : 0;
     var fanBarHtml = '';
     for (var i = 0; i < 8; i++) {
       var barOn = i < fillCount;
@@ -1847,10 +2317,7 @@ class AcControllerCardV2 extends HTMLElement {
           + ' C ' + c2x.toFixed(2) + ' ' + c2y.toFixed(2) + ' ' + c3x.toFixed(2) + ' ' + c3y.toFixed(2) + ' ' + bRx.toFixed(2) + ' ' + bRy.toFixed(2)
           + ' Z';
       }
-      // Blade count scales with fan speed: min 3, max 6
-      var bladeCount = actualFanModes.length <= 4
-        ? ([4, 3, 4, 5][fi] || 4)
-        : Math.max(3, Math.min(6, 3 + Math.round(fi * 3 / (actualFanModes.length - 1))));
+      var bladeCount = [4, 3, 3, 4, 4, 4, 5, 5][Math.min(fi, 7)] || 4;
       var blades = '';
       for (var b = 0; b < bladeCount; b++) {
         var ang = b * (360 / bladeCount);
@@ -1858,8 +2325,7 @@ class AcControllerCardV2 extends HTMLElement {
         blades += '<path d="' + fatBlade(ang) + '" fill="' + color + '" fill-opacity="0.82"'
           + ' stroke="rgba(255,255,255,0.55)" stroke-width="0.8" stroke-linejoin="round"/>';
       }
-      var isAutoFan = fanMode === 'auto';
-      var animStyle = isAutoFan ? 'style="transform-origin:21px 21px;animation:fanSpin 1.4s linear infinite"' : '';
+      var animStyle = fi === 0 ? 'style="transform-origin:21px 21px;animation:fanSpin 1.4s linear infinite"' : '';
       return '<svg width="' + dim + '" height="' + dim + '" viewBox="0 0 42 42" ' + animStyle + '>'
         + '<defs><filter id="fanGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'
         + '<g filter="url(#fanGlow)">'
@@ -1869,13 +2335,7 @@ class AcControllerCardV2 extends HTMLElement {
         + '<circle cx="21" cy="21" r="2" fill="rgba(220,240,255,0.85)"/>'
         + '</svg>';
     })(fi);
-    // Swing active: true nếu swing_mode khác off, hoặc có vane entity đang active
     var swingActive = swingMode !== 'off';
-    if (vaneVertEnt && this._hass && this._hass.states[vaneVertEnt]) {
-      swingActive = this._hass.states[vaneVertEnt].state !== 'off';
-    } else if (vaneHorizEnt && this._hass && this._hass.states[vaneHorizEnt]) {
-      swingActive = this._hass.states[vaneHorizEnt].state !== 'off';
-    }
     var sColor = swingActive ? 'var(--accent)' : 'rgba(255,255,255,0.3)';
     var sOp    = swingActive ? '1' : '0.5';
     var swingSvg = '<svg width="38" height="28" viewBox="0 0 38 28" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -1895,14 +2355,87 @@ class AcControllerCardV2 extends HTMLElement {
       var rState = this._s(ROOMS[j].id);
       var ron = rState !== 'off';
       var rTemp = parseFloat(this._a(ROOMS[j].id, 'current_temperature') || 0);
-      var rTempStr = rTemp > 0 ? Math.round(rTemp) + '°' : '--';
+      var rTempStr = rTemp > 0 ? rTemp.toFixed(1) + '°' : '--';
+
+      // ── Đọc độ ẩm phòng (per-room sensor hoặc global) ──
+      var rHumRaw = NaN;
+      var rEntCfgJ = (cfg.entities && cfg.entities[j]) || {};
+      if (rEntCfgJ.humidity_entity && this._hass && this._hass.states[rEntCfgJ.humidity_entity]) {
+        rHumRaw = parseFloat(this._hass.states[rEntCfgJ.humidity_entity].state);
+      } else if (this._a(ROOMS[j].id, 'current_humidity')) {
+        rHumRaw = parseFloat(this._a(ROOMS[j].id, 'current_humidity'));
+      }
+
+      // ── Sinh tooltip thông minh theo nhiệt độ + độ ẩm + trạng thái ──
+      var tipMsg = '';
+      var tipColor = 'rgba(255,255,255,0.88)';
+      var tipEmoji = '';
+      if (rTemp > 0) {
+        if (!ron) {
+          // Máy đang tắt — gợi ý bật
+          if (rTemp >= 32) {
+            tipEmoji = '🥵'; tipMsg = lang === 'vi' ? 'Nóng quá ' + rTemp.toFixed(1) + '° rồi, bật điều hòa đi bạn!' : 'Too hot at ' + rTemp.toFixed(1) + '°! Turn on the AC!';
+            tipColor = '#fca5a5';
+          } else if (rTemp >= 29) {
+            tipEmoji = '☀️'; tipMsg = lang === 'vi' ? 'Hơi nóng đó, ' + rTemp.toFixed(1) + '° — bật điều hòa cho mát?' : 'Getting warm (' + rTemp.toFixed(1) + '°) — turn on AC?';
+            tipColor = '#fdba74';
+          } else if (rTemp <= 18) {
+            tipEmoji = '🥶'; tipMsg = lang === 'vi' ? 'Lạnh quá ' + rTemp.toFixed(1) + '°, bật sưởi đi bạn!' : 'Too cold at ' + rTemp.toFixed(1) + '°! Turn on heat?';
+            tipColor = '#93c5fd';
+          } else if (!isNaN(rHumRaw) && rHumRaw >= 75) {
+            tipEmoji = '💧'; tipMsg = lang === 'vi' ? 'Độ ẩm ' + Math.round(rHumRaw) + '% — ẩm thật! Bật hút ẩm đi?' : 'Humidity ' + Math.round(rHumRaw) + '% — quite humid! Try dry mode?';
+            tipColor = '#c4b5fd';
+          } else {
+            tipEmoji = '✅'; tipMsg = lang === 'vi' ? rTemp.toFixed(1) + '° — phòng đang ổn, không cần bật đâu' : rTemp.toFixed(1) + '° — room is comfortable';
+            tipColor = '#86efac';
+          }
+        } else {
+          // Máy đang bật — nhận xét trạng thái
+          if (rState === 'cool') {
+            if (rTemp > 28) {
+              tipEmoji = '❄️'; tipMsg = lang === 'vi' ? 'Đang làm lạnh... ' + rTemp.toFixed(1) + '° còn hơi cao, chờ tí nha!' : 'Cooling... ' + rTemp.toFixed(1) + '° still a bit high, hang on!';
+              tipColor = '#7dd3fc';
+            } else if (rTemp <= 24) {
+              tipEmoji = '😌'; tipMsg = lang === 'vi' ? rTemp.toFixed(1) + '° — mát rồi đó, dễ chịu lắm!' : rTemp.toFixed(1) + '° — nice and cool now!';
+              tipColor = '#6ee7b7';
+            } else {
+              tipEmoji = '❄️'; tipMsg = lang === 'vi' ? 'Đang làm lạnh, ' + rTemp.toFixed(1) + '° — sắp mát rồi!' : 'Cooling down (' + rTemp.toFixed(1) + '°) — almost there!';
+              tipColor = '#93c5fd';
+            }
+          } else if (rState === 'heat') {
+            tipEmoji = '🔥'; tipMsg = lang === 'vi' ? 'Đang sưởi ấm, ' + rTemp.toFixed(1) + '° — ấm áp rồi nhé!' : 'Heating up (' + rTemp.toFixed(1) + '°) — getting warm!';
+            tipColor = '#fca5a5';
+          } else if (rState === 'dry') {
+            tipEmoji = '💨'; tipMsg = lang === 'vi'
+              ? (!isNaN(rHumRaw) ? 'Đang hút ẩm, ' + Math.round(rHumRaw) + '% — không khí đang khô ráo dần' : 'Đang hút ẩm — không khí dễ chịu hơn rồi!')
+              : (!isNaN(rHumRaw) ? 'Drying... ' + Math.round(rHumRaw) + '% humidity — getting better!' : 'Dehumidifying — air feels fresher!');
+            tipColor = '#c4b5fd';
+          } else if (rState === 'fan_only') {
+            tipEmoji = '🌬️'; tipMsg = lang === 'vi' ? 'Quạt đang chạy, ' + rTemp.toFixed(1) + '° — gió mát thôi nhé!' : 'Fan on (' + rTemp.toFixed(1) + '°) — just fresh air!';
+            tipColor = '#86efac';
+          }
+        }
+        // Cảnh báo độ ẩm cao kèm theo (cho các mode khác dry)
+        if (!isNaN(rHumRaw) && rHumRaw >= 80 && rState !== 'dry' && !tipMsg.includes('ẩm') && !tipMsg.includes('humid')) {
+          tipMsg += (lang === 'vi' ? ' (Độ ẩm ' + Math.round(rHumRaw) + '% hơi cao!)' : ' (Humidity ' + Math.round(rHumRaw) + '% is high!)');
+        }
+      } else {
+        tipMsg = lang === 'vi' ? 'Không có dữ liệu nhiệt độ' : 'No temperature data';
+        tipColor = 'rgba(255,255,255,0.5)';
+      }
+      var tipHtml = tipMsg
+        ? '<span class="room-tab-tip" style="color:' + tipColor + '">' + tipEmoji + ' ' + tipMsg + '</span>'
+        : '';
       var isActive = j === this._activeIdx;
       var tabClass = 'room-tab'
         + (isActive && ron  ? ' room-tab--active room-tab--on'  : '')
         + (isActive && !ron ? ' room-tab--active room-tab--off' : '')
         + (!isActive && ron ? ' room-tab--running' : '');
-      roomTabs += '<button class="' + tabClass + '" data-room="' + j + '">'
-        + '<span class="room-tab-ico">' + ROOMS[j].icon + '</span>'
+      var rMode = this._s(ROOMS[j].id);
+      var rModeCfg = MODE_CFG[rMode] || MODE_CFG.cool;
+      var tabIconColor = ron ? rModeCfg.color : 'rgba(255,255,255,0.55)';
+      roomTabs += '<button class="' + tabClass + '" data-room="' + j + '" data-tip="' + (tipMsg ? tipEmoji + ' ' + tipMsg : '') + '" data-tip-color="' + tipColor + '">'
+        + '<span class="room-tab-ico">' + this._mdiIcon(ROOMS[j].icon, 20, tabIconColor) + '</span>'
         + '<span class="room-tab-info">'
         + '  <span class="room-tab-name">' + ROOMS[j].label + '</span>'
         + '  <span class="room-tab-temp">' + rTempStr + '</span>'
@@ -1921,14 +2454,21 @@ class AcControllerCardV2 extends HTMLElement {
       var mc = Object.assign({}, MODE_CFG[mk], { lbl: tr.modes[mk] || MODE_CFG[mk].lbl });
       var act = hvac === mk;
       var st  = act ? ('--bc:' + mc.color + ';--bg:' + mc.glow + ';') : '';
+      var modeIconColor = act ? mc.color : '#ffffff';
+      var modeIconHtml = (mc.icon && mc.icon.indexOf('mdi:') === 0)
+        ? '<ha-icon icon="' + mc.icon + '" style="--mdc-icon-size:22px;--mdc-icon-color:' + modeIconColor + ';width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:' + modeIconColor + '"></ha-icon>'
+        : '<span style="font-size:18px;line-height:1;vertical-align:middle">' + mc.icon + '</span>';
       modeBtns += '<button class="mode-btn' + (act ? ' mode-btn--active' : '') + '" data-hvac="' + mk + '" style="' + st + '">'
-        + '<span class="mode-icon">' + mc.icon + '</span>'
+        + '<span class="mode-icon">' + modeIconHtml + '</span>'
         + '<span class="mode-lbl">' + mc.lbl + '</span>'
         + '</button>';
     }
 
     var comfortTxt = (hvac === 'cool' || hvac === 'heat') ? tr.comfortTemp(curTemp) : (tr.comfort[hvac] || '');
-    var modeChip = isOn ? ('<span class="ac-mode-chip">' + mode.icon + ' ' + mode.lbl + '</span>') : '';
+    var modeChipIcon = (mode.icon && mode.icon.indexOf('mdi:') === 0)
+      ? '<ha-icon icon="' + mode.icon + '" style="--mdc-icon-size:14px;--mdc-icon-color:' + mode.color + ';width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:' + mode.color + '"></ha-icon>'
+      : '<span style="font-size:12px;line-height:1;vertical-align:middle">' + mode.icon + '</span>';
+    var modeChip = isOn ? ('<span class="ac-mode-chip">' + modeChipIcon + ' ' + mode.lbl + '</span>') : '';
 
     var pwClass = isOn ? 'pw-on' : 'pw-off';
     var entityState = this._hass && this._hass.states && this._hass.states[room.id] ? this._hass.states[room.id].state : 'unknown';
@@ -1944,15 +2484,31 @@ class AcControllerCardV2 extends HTMLElement {
       : '--';
     // Nhiệt độ ngoài: ưu tiên sensor config, fallback current_temperature phòng đang chọn
     var outdoorTempVal = cfg.outdoor_temp_entity && this._hass && this._hass.states[cfg.outdoor_temp_entity]
-      ? Math.round(parseFloat(this._hass.states[cfg.outdoor_temp_entity].state)) + '°'
-      : (curTemp > 0 ? Math.round(curTemp) + '°' : '--°');
+      ? parseFloat(this._hass.states[cfg.outdoor_temp_entity].state).toFixed(1) + '°'
+      : (curTemp > 0 ? curTemp.toFixed(1) + '°' : '--°');
     // Độ ẩm ngoài: ưu tiên outdoor sensor config, fallback roomHumidityRaw (đã tính từ phòng/cảm biến)
     var humidityVal = cfg.humidity_entity && this._hass && this._hass.states[cfg.humidity_entity]
       ? Math.round(parseFloat(this._hass.states[cfg.humidity_entity].state)) + '%'
       : (roomHumidityRaw > 0 ? Math.round(roomHumidityRaw) + '%' : '--%');
-    var powerVal = cfg.power_entity && this._hass && this._hass.states[cfg.power_entity]
-      ? parseFloat(this._hass.states[cfg.power_entity].state).toFixed(1) + ' kW'
-      : '--';
+    var powerUnit = cfg.power_unit || 'kw';
+    // Per-room power entity: ưu tiên entities[activeIdx].power_entity, fallback global power_entity
+    var roomPowerEntity = roomEntCfg.power_entity || null;
+    var powerRawState = null;
+    if (roomPowerEntity && this._hass && this._hass.states[roomPowerEntity]) {
+      powerRawState = parseFloat(this._hass.states[roomPowerEntity].state);
+    } else if (cfg.power_entity && this._hass && this._hass.states[cfg.power_entity]) {
+      powerRawState = parseFloat(this._hass.states[cfg.power_entity].state);
+    }
+    var powerVal = '--';
+    if (powerRawState !== null && !isNaN(powerRawState)) {
+      if (powerUnit === 'w') {
+        powerVal = powerRawState >= 1000
+          ? (powerRawState / 1000).toFixed(2) + ' kW'
+          : Math.round(powerRawState) + ' W';
+      } else {
+        powerVal = powerRawState.toFixed(2) + ' kW';
+      }
+    }
 
     // ── SUPER LITE MODE ──────────────────────────────────────────────────────
     var isSuperLite = this._config.view_mode === 'super_lite';
@@ -1964,32 +2520,29 @@ class AcControllerCardV2 extends HTMLElement {
         var smk = slModeKeys[sm];
         if (cfg[slModeShowMap[smk]] === false) continue;
         var smc = Object.assign({}, MODE_CFG[smk], { lbl: tr.modes[smk] || MODE_CFG[smk].lbl });
-        slModeOptions += '<option value="' + smk + '"' + (hvac === smk ? ' selected' : '') + '>' + smc.icon + ' ' + smc.lbl + '</option>';
+        var smcOptIcon = (smc.icon && smc.icon.indexOf('mdi:') === 0)
+          ? ({ 'mdi:snowflake':'❄', 'mdi:fire':'🔥', 'mdi:water':'💧', 'mdi:fan':'🌬️' }[smc.icon] || '●')
+          : smc.icon;
+        slModeOptions += '<option value="' + smk + '"' + (hvac === smk ? ' selected' : '') + '>' + smcOptIcon + ' ' + smc.lbl + '</option>';
       }
       var slIsOn = hvac !== 'off';
       // Outdoor sensors for super lite
-      var slOutdoorTemp = (cfg.show_outdoor_temp !== false) && cfg.outdoor_temp_entity && this._hass && this._hass.states[cfg.outdoor_temp_entity]
-        ? Math.round(parseFloat(this._hass.states[cfg.outdoor_temp_entity].state)) + '°'
+      var slOutdoorTemp = cfg.outdoor_temp_entity && this._hass && this._hass.states[cfg.outdoor_temp_entity]
+        ? parseFloat(this._hass.states[cfg.outdoor_temp_entity].state).toFixed(1) + '°'
         : null;
-      var slHumidity = (cfg.show_humidity !== false) && cfg.humidity_entity && this._hass && this._hass.states[cfg.humidity_entity]
+      var slHumidity = cfg.humidity_entity && this._hass && this._hass.states[cfg.humidity_entity]
         ? Math.round(parseFloat(this._hass.states[cfg.humidity_entity].state)) + '%'
-        : null;
-      var slPm25 = cfg.pm25_entity && this._hass && this._hass.states[cfg.pm25_entity]
-        ? parseFloat(this._hass.states[cfg.pm25_entity].state)
-        : null;
-      var slPower = (cfg.show_power !== false) && cfg.power_entity && this._hass && this._hass.states[cfg.power_entity]
-        ? parseFloat(this._hass.states[cfg.power_entity].state).toFixed(1) + ' kW'
         : null;
 
       // Room env override: nếu show_room_env bật → dùng nhiệt độ/độ ẩm phòng đang chọn
       var slShowRoomEnv = cfg.show_room_env === true;
       var slEnvTemp, slEnvHumidity, slEnvIsRoom;
       if (slShowRoomEnv) {
-        // Nhiệt độ phòng: luôn hiện khi show_room_env bật (không phụ thuộc show_outdoor_temp)
+        // Nhiệt độ phòng: ưu tiên cảm biến riêng, fallback current_temperature của entity
         var roomEntCfgSL = (cfg.entities && cfg.entities[this._activeIdx]) || {};
         var roomTempSL = curTemp; // curTemp đã tính từ sensor/entity bên trên
         var roomHumSL  = roomHumidityRaw; // roomHumidityRaw đã tính bên trên
-        slEnvTemp     = roomTempSL > 0 ? Math.round(roomTempSL) + '°' : null;
+        slEnvTemp     = roomTempSL > 0 ? roomTempSL.toFixed(1) + '°' : null;
         slEnvHumidity = roomHumSL  > 0 ? Math.round(roomHumSL) + '%'  : null;
         slEnvIsRoom   = true;
       } else {
@@ -2056,41 +2609,78 @@ class AcControllerCardV2 extends HTMLElement {
         var sriState = this._s(ROOMS[sri].id);
         var sriOn    = sriState !== 'off';
         var sriTemp  = parseFloat(this._a(ROOMS[sri].id, 'current_temperature') || 0);
-        var sriTempStr = sriTemp > 0 ? ' · ' + Math.round(sriTemp) + '°' : '';
-        var sriLabel = ROOMS[sri].icon + ' ' + ROOMS[sri].label + sriTempStr;
-        if (sri === this._activeIdx) slRoomBtnLabel = sriLabel;
+        var sriTempStr = sriTemp > 0 ? ' · ' + sriTemp.toFixed(1) + '°' : '';
+        var sriHumRaw = parseFloat(this._a(ROOMS[sri].id, 'current_humidity') || this._a(ROOMS[sri].id, 'humidity') || 0);
+        var sriEntCfgH = (cfg.entities && cfg.entities[sri]) || {};
+        if (sriEntCfgH.humidity_entity && this._hass && this._hass.states[sriEntCfgH.humidity_entity]) {
+          var sriHumSensor = parseFloat(this._hass.states[sriEntCfgH.humidity_entity].state);
+          if (!isNaN(sriHumSensor)) sriHumRaw = sriHumSensor;
+        }
+        var sriHumStr = sriHumRaw > 0 ? ' · 💧' + Math.round(sriHumRaw) + '%' : '';
+        var sriIconColor = sriOn ? (MODE_CFG[sriState] || MODE_CFG.cool).color : 'rgba(255,255,255,0.55)';
+        var sriIconHtml = this._mdiIcon(ROOMS[sri].icon, 18, sriIconColor);
+        var sriLabelText = ROOMS[sri].label + sriTempStr + sriHumStr;
+        if (sri === this._activeIdx) slRoomBtnLabel = sriIconHtml + ' ' + sriLabelText;
         slRoomPopupItems += '<div class="sl-room-item' + (sri === this._activeIdx ? ' active' : '') + '" data-room-idx="' + sri + '">'
-          + '<span style="flex:1">' + sriLabel + '</span>'
+          + '<span style="flex:1;display:flex;align-items:center;gap:6px">' + sriIconHtml + '<span>' + sriLabelText + '</span></span>'
           + '<span class="sl-room-item-badge ' + (sriOn ? 'on' : 'off') + '">' + (sriOn ? 'ON' : 'OFF') + '</span>'
           + '</div>';
       }
       this._slRoomPopupItems = slRoomPopupItems;
 
-      var slHtml = '<div class="card card--super-lite" style="--accent:' + mode.color + ';--glow:' + mode.glow + ';background:' + bgGrad + '">'
+      var isDeepNeonSL = (cfg.background_preset === 'deep_neon');
+      var slShowFan   = cfg.show_sl_fan   !== false;
+      var slShowSwing = cfg.show_sl_swing !== false;
+      var slCompact   = slShowFan || slShowSwing;
+      var slFanLabelIdx = FAN_LEVELS.indexOf(fanMode);
+      var slFanLabel  = (slFanLabelIdx >= 0 && tr.fans && tr.fans[slFanLabelIdx]) ? tr.fans[slFanLabelIdx] : fanMode;
+      var slSwingLabel = swingCurrentLabel;
+
+      // ── Room power per-room ──────────────────────────────────────────────────
+      var slShowRoomPower = cfg.show_sl_room_power !== false;
+      var slPowerUnit = cfg.power_unit || 'kw'; // 'kw' | 'w'
+      var slRoomPowerRaw = null;
+      var roomEntCfgPow = (cfg.entities && cfg.entities[this._activeIdx]) || {};
+      if (roomEntCfgPow.power_entity && this._hass && this._hass.states[roomEntCfgPow.power_entity]) {
+        var rawPow = parseFloat(this._hass.states[roomEntCfgPow.power_entity].state);
+        if (!isNaN(rawPow)) {
+          slRoomPowerRaw = slPowerUnit === 'w'
+            ? (rawPow >= 1000 ? (rawPow/1000).toFixed(2) + ' kW' : Math.round(rawPow) + ' W')
+            : rawPow.toFixed(2) + ' kW';
+        }
+      }
+      var slHtml = '<div class="card card--super-lite' + (isDeepNeonSL ? ' card--deep-neon' : '') + '" style="--accent:' + mode.color + ';--glow:' + mode.glow + ';background:' + bgGrad + '">'
         + '<div class="sl-body">'
 
         // ── Header: title + sensors + wifi + gear + status badge
         + '<div class="sl-hdr">'
         + '  <div style="display:flex;flex-direction:column;gap:2px">'
-        + '    <span class="sl-title">' + tr.cardTitle + '</span>'
-        + ((slEnvTemp || slEnvHumidity || slPm25 || slPower) ? (
-            '    <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-          + (slEnvTemp     ? '<span style="font-size:10px;color:rgba(255,255,255,' + (slEnvIsRoom ? '0.9' : '0.65') + ');font-family:\'Orbitron\',sans-serif;font-weight:600">' + (slEnvIsRoom ? '&#127968;' : '&#127777;') + ' ' + slEnvTemp + '</span>' : '')
-          + (slEnvHumidity ? '<span style="font-size:10px;color:rgba(255,255,255,' + (slEnvIsRoom ? '0.75' : '0.55') + ');font-family:\'Orbitron\',sans-serif;font-weight:600">&#128167; ' + slEnvHumidity + '</span>' : '')
-          + (slPm25 !== null ? '<span style="font-size:10px;color:rgba(255,255,255,0.6);font-family:\'Orbitron\',sans-serif;font-weight:600">&#127787; ' + Math.round(slPm25) + '</span>' : '')
-          + (slPower        ? '<span style="font-size:10px;color:rgba(255,255,255,0.6);font-family:\'Orbitron\',sans-serif;font-weight:600">&#9889; ' + slPower + '</span>' : '')
+        + '    <span class="sl-title">' + tr.greet() + ' ' + (cfg.owner_name || tr.cardSub) + '</span>'
+        + (!slEnvIsRoom ? '    <span style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:600;margin-bottom:1px">&#127777; ' + (tr.outdoorLabel || 'Outdoor') + '</span>' : '')
+        + (slEnvTemp || slEnvHumidity || (slShowRoomPower && slRoomPowerRaw) ? (
+            '    <span style="display:flex;gap:8px;align-items:center">'
+          + (slEnvTemp     ? '<span style="font-size:13px;color:rgba(255,255,255,' + (slEnvIsRoom ? '0.9' : '0.65') + ');font-family:\'Orbitron\',sans-serif;font-weight:600">' + (slEnvIsRoom ? '&#127968;' : '&#127777;') + ' ' + slEnvTemp + '</span>' : '')
+          + (slEnvHumidity ? '<span style="font-size:13px;color:rgba(255,255,255,' + (slEnvIsRoom ? '0.75' : '0.55') + ');font-family:\'Orbitron\',sans-serif;font-weight:600">&#128167; ' + slEnvHumidity + '</span>' : '')
+          + (slShowRoomPower && slRoomPowerRaw ? '<span style="font-size:13px;color:rgba(255,255,255,0.7);font-family:\'Orbitron\',sans-serif;font-weight:600">&#9889; ' + slRoomPowerRaw + '</span>' : '')
           + '    </span>'
           ) : '')
         + '  </div>'
-        + '  <div style="display:flex;align-items:center;gap:10px">'
-        + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + wifiColor + '" stroke-width="1.8" style="filter:' + wifiGlow + ';flex-shrink:0"><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>'
-        + '    <button id="sl-btn-gear" style="background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;line-height:0">'
-        + '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>'
-        + '    </button>'
-        + '    <span class="sl-badge">'
-        + '      <span class="sl-led ' + (slIsOn ? 'sl-led-on' : 'sl-led-off') + '"></span>'
-        + '      <span class="sl-badge-txt">' + (slIsOn ? tr.statusOn : tr.statusOff) + '</span>'
-        + '    </span>'
+        + '  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">'
+        + '    <div style="display:flex;align-items:center;gap:10px">'
+        + '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + wifiColor + '" stroke-width="1.8" style="filter:' + wifiGlow + ';flex-shrink:0"><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>'
+        + '      <button id="sl-btn-gear" style="background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;line-height:0">'
+        + '        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>'
+        + '      </button>'
+        + '      <span class="sl-badge">'
+        + '        <span class="sl-led ' + (slIsOn ? 'sl-led-on' : 'sl-led-off') + '"></span>'
+        + '        <span class="sl-badge-txt">' + (slIsOn ? tr.statusOn : tr.statusOff) + '</span>'
+        + '      </span>'
+        + '    </div>'
+        + '    <div style="display:flex;align-items:center;gap:3px">'
+        + '      <button class="sl-vs-btn' + (cfg.view_mode !== 'super_lite' && cfg.view_mode !== 'lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-full" title="Full"><svg width="20" height="8" viewBox="0 0 20 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/><circle cx="18" cy="4" r="2.2" fill="currentColor"/></svg></button>'
+        + '      <button class="sl-vs-btn' + (cfg.view_mode === 'lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-lite" title="Lite"><svg width="14" height="8" viewBox="0 0 14 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/></svg></button>'
+        + '      <button class="sl-vs-btn' + (cfg.view_mode === 'super_lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-superlite" title="Super Lite"><svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="2.2" fill="currentColor"/></svg></button>'
+        + '    </div>'
         + '  </div>'
         + '</div>'
 
@@ -2123,19 +2713,30 @@ class AcControllerCardV2 extends HTMLElement {
         + '</svg>'
         + '<div class="sl-dial-center">'
         + '  <div class="sl-temp-lbl">' + tr.tempLabel + '</div>'
-        + '  <div class="sl-temp-val" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 30px ' + acTempColor(curTemp) + ',0 0 60px ' + acTempColor(curTemp) + '">' + Math.round(curTemp) + '<span style="font-size:22px;font-weight:400;vertical-align:super;line-height:0">°</span></div>'
-        + '  <div class="sl-temp-feel">' + comfortTxt + '</div>'
+        + '  <div class="sl-temp-val" id="live-cur-temp" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 30px ' + acTempColor(curTemp) + ',0 0 60px ' + acTempColor(curTemp) + '">' + parseFloat(curTemp).toFixed(1) + '<span style="font-size:22px;font-weight:400;vertical-align:super;line-height:0">°</span></div>'
+        + '  <div class="sl-temp-feel" id="live-comfort">' + comfortTxt + '</div>'
         + '</div>'
         + '</div>'
 
-        // ── Temp control with fan speed (left) and vane (right)
+        // ── Temp control (với fan bên trái, swing bên phải)
+        + (function() {
+            if (hvac !== 'cool' || !slIsOn) return '';
+            var slEta = this._calcEta(this._activeIdx, setTemp, curTemp, fanMode);
+            if (!slEta) return '';
+            var lang2 = cfg.language || 'vi';
+            var prefix2 = slEta.mode === 'estimated' ? '⏱~ ' : '⏱ ';
+            var etaTxt2 = lang2 === 'vi'
+              ? prefix2 + 'Dự kiến đạt ' + setTemp + '°C trong ' + slEta.eta + ' phút'
+              : prefix2 + 'Est. ' + setTemp + '°C in ' + slEta.eta + ' min';
+            return '<div class="eta-bar-sl" id="live-eta">' + etaTxt2 + '</div>';
+          }).call(this)
         + '<div class="sl-temp-ctrl">'
-        + (cfg.show_fan !== false ? (
-          '  <button class="sl-extra-btn" id="sl-btn-fan" title="' + tr.fanLabel + '">'
-        + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 12m-2 0a2 2 0 104 0 2 2 0 10-4 0"/><path d="M12 2C12 2 12 8 12 10"/><path d="M12 14c0 2 0 8 0 8"/><path d="M2 12c0 0 6 0 8 0"/><path d="M14 12c2 0 8 0 8 0"/><path d="M4.93 4.93l4.24 4.24"/><path d="M14.83 14.83l4.24 4.24"/><path d="M4.93 19.07l4.24-4.24"/><path d="M14.83 9.17l4.24-4.24"/></svg>'
-        + '    <span class="sl-extra-lbl">' + slFanLabel + '</span>'
-        + '  </button>'
-        ) : '<div style="min-width:60px"></div>')
+        + (slShowFan ? (
+            '  <button class="sl-mini-btn sl-mini-btn--inline sl-fan-inline" id="sl-btn-fan-sl" type="button">'
+          + '    <span class="sl-mini-btn-ico">&#128168;</span>'
+          + '    <span class="sl-mini-btn-val">' + slFanLabel + '</span>'
+          + '  </button>'
+        ) : '')
         + '  <button class="sl-temp-btn" id="sl-btn-temp-down">&#8722;</button>'
         + '  <span class="sl-temp-set">' + setTemp + '&#176;C</span>'
         + '  <button class="sl-temp-btn" id="sl-btn-temp-up">+</button>'
@@ -2159,13 +2760,13 @@ class AcControllerCardV2 extends HTMLElement {
         ) : (!slHasVaneVert && !slHasVaneHoriz ? '<div style="min-width:60px"></div>' : ''))
         + '</div>'
 
-        // ── Bottom controls: mode dropdown (30%) + room dropdown (70%)
+        // ── Bottom controls: mode + room (scale ra hết card)
         + '<div class="sl-controls">'
         + '  <div class="sl-mode-wrap">'
         + '    <div class="sl-select-lbl">&#9881; ' + (tr.modeLabel || 'MODE') + '</div>'
         + (cfg.popup_style === 'effect' || cfg.popup_style === 'wave'
           ? (    '    <button class="sl-room-btn" id="sl-mode-btn" type="button">'
-               + '      <span class="sl-room-btn-txt" id="sl-mode-btn-txt">' + (MODE_CFG[hvac] ? (MODE_CFG[hvac].icon + ' ' + (tr.modes[hvac] || MODE_CFG[hvac].lbl)) : (tr.modes['off'] || 'Off')) + '</span>'
+               + '      <span class="sl-room-btn-txt" id="sl-mode-btn-txt">' + (MODE_CFG[hvac] ? ((MODE_CFG[hvac].icon && MODE_CFG[hvac].icon.indexOf('mdi:') === 0 ? '<ha-icon icon="' + MODE_CFG[hvac].icon + '" style="--mdc-icon-size:16px;--mdc-icon-color:' + MODE_CFG[hvac].color + ';width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;color:' + MODE_CFG[hvac].color + '"></ha-icon>' : '<span style="font-size:13px;line-height:1;vertical-align:middle">' + MODE_CFG[hvac].icon + '</span>') + ' ' + (tr.modes[hvac] || MODE_CFG[hvac].lbl)) : (tr.modes['off'] || 'Off')) + '</span>'
                + '      <svg class="sl-room-btn-arrow" id="sl-mode-btn-arrow" viewBox="0 0 10 6" fill="rgba(255,255,255,0.5)"><path d="M0 0l5 6 5-6z"/></svg>'
                + '    </button>')
           : (    '    <select class="sl-select' + (hvac !== 'off' ? ' sl-mode-active' : '') + '" id="sl-mode-select">'
@@ -2184,9 +2785,14 @@ class AcControllerCardV2 extends HTMLElement {
                    var opts = '';
                    for (var ri = 0; ri < ROOMS.length; ri++) {
                      var riTemp = parseFloat(this._a(ROOMS[ri].id, 'current_temperature') || 0);
-                     var riTempStr = riTemp > 0 ? ' · ' + Math.round(riTemp) + '°' : '';
+                     var riTempStr = riTemp > 0 ? ' · ' + riTemp.toFixed(1) + '°' : '';
+                     var riHumRaw = parseFloat(this._a(ROOMS[ri].id, 'current_humidity') || this._a(ROOMS[ri].id, 'humidity') || 0);
+                     var riEntCfgH = (cfg.entities && cfg.entities[ri]) || {};
+                     if (riEntCfgH.humidity_entity && this._hass && this._hass.states[riEntCfgH.humidity_entity]) { var riHumS = parseFloat(this._hass.states[riEntCfgH.humidity_entity].state); if (!isNaN(riHumS)) riHumRaw = riHumS; }
+                     var riHumStr = riHumRaw > 0 ? ' · 💧' + Math.round(riHumRaw) + '%' : '';
+                     var riIconTxt = ROOMS[ri].icon && ROOMS[ri].icon.indexOf('mdi:') === 0 ? '' : (ROOMS[ri].icon + ' ');
                      opts += '<option value="' + ri + '"' + (ri === this._activeIdx ? ' selected' : '') + '>'
-                           + ROOMS[ri].icon + ' ' + ROOMS[ri].label + riTempStr + '</option>';
+                           + riIconTxt + ROOMS[ri].label + riTempStr + riHumStr + '</option>';
                    }
                    return opts;
                  }).call(this)
@@ -2202,20 +2808,22 @@ class AcControllerCardV2 extends HTMLElement {
         container.id = 'ac-card-root';
         this.shadowRoot.appendChild(container);
       }
-      container.innerHTML = slHtml;
+      container.innerHTML = '<div class="card-scale-wrap" id="ac-scale-wrap">' + slHtml + '</div>';
       this._initialized = true;
       this._bindSuperLite();
+      if (this._applyScale) { var _slSelf = this; requestAnimationFrame(function(){ _slSelf._applyScale(); }); }
       return;
     }
     // ── END SUPER LITE ───────────────────────────────────────────────────────
 
     // ── Không có <link>/<style> ở đây – đã inject ở connectedCallback
-    var html = '<div class="card' + (isLite ? ' card--lite' : '') + '" style="--accent:' + mode.color + ';--glow:' + mode.glow + ';background:' + bgGrad + '">'
+    var isDeepNeon = (cfg.background_preset === 'deep_neon');
+    var html = '<div class="card' + (isLite ? ' card--lite' : '') + (isDeepNeon ? ' card--deep-neon' : '') + '" style="--accent:' + mode.color + ';--glow:' + mode.glow + ';background:' + bgGrad + '">'
 + '<div class="left' + (isLite ? ' left--lite' : '') + '">'
 
 + '<div class="hdr">'
 + '  <div class="hdr-brand">'
-+ '    <div class="hdr-ico">' + mode.icon + '</div>'
++ '    <div class="hdr-ico">' + (mode.icon && mode.icon.indexOf('mdi:') === 0 ? '<ha-icon icon="' + mode.icon + '" style="--mdc-icon-size:22px;--mdc-icon-color:' + mode.color + ';width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:' + mode.color + '"></ha-icon>' : '<span style="font-size:20px;line-height:1;color:' + mode.color + '">' + mode.icon + '</span>') + '</div>'
 + '    <div><div class="hdr-title">' + tr.cardTitle + '</div><div class="hdr-sub">' + tr.cardSub + '</div></div>'
 + '  </div>'
 + '  <div class="hdr-icons">'
@@ -2225,13 +2833,19 @@ class AcControllerCardV2 extends HTMLElement {
 + '    </button>'
 + '  </div>'
 + '</div>'
-
 + '<div class="greet-row" style="' + (cfg.show_greet === false ? 'display:none;' : '') + '">'
 + '  <div>'
 + '    <div class="greet-sub">' + tr.greet() + '</div>'
 + '    <div class="greet-name">' + (cfg.owner_name || 'Smart Home') + '</div>'
 + '  </div>'
-+ '  <button id="btn-eco" class="eco-badge ' + (ecoOn ? 'eco-on' : 'eco-off') + '">&#127807; ' + (ecoOn ? 'ECO ON' : 'ECO') + '</button>'
++ '  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">'
++ '    <div class="hdr-vs-row">'
++ '      <button class="hdr-vs-btn' + (!isLite ? ' hdr-vs-btn--active' : '') + '" id="hdr-vs-full" title="Full"><svg width="20" height="8" viewBox="0 0 20 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/><circle cx="18" cy="4" r="2.2" fill="currentColor"/></svg></button>'
++ '      <button class="hdr-vs-btn' + (isLite ? ' hdr-vs-btn--active' : '') + '" id="hdr-vs-lite" title="Lite"><svg width="14" height="8" viewBox="0 0 14 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/></svg></button>'
++ '      <button class="hdr-vs-btn" id="hdr-vs-superlite" title="Super Lite"><svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="2.2" fill="currentColor"/></svg></button>'
++ '    </div>'
++ '    <button id="btn-eco" class="eco-badge ' + (ecoOn ? 'eco-on' : 'eco-off') + '">&#127807; ' + (ecoOn ? 'ECO ON' : 'ECO') + '</button>'
++ '  </div>'
 + '</div>'
 
 + '<div class="view-switch-row">'
@@ -2266,8 +2880,8 @@ class AcControllerCardV2 extends HTMLElement {
 + '</svg>'
 + '<div class="dial-center">'
 + '  <div class="dial-lbl">' + tr.tempLabel + '</div>'
-+ '  <div class="dial-temp" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 30px ' + acTempColor(curTemp) + ',0 0 60px ' + acTempColor(curTemp) + '">' + Math.round(curTemp) + '<span class="dial-deg">&#176;</span></div>'
-+ '  <div class="dial-feel">' + comfortTxt + '</div>'
++ '  <div class="dial-temp" id="live-cur-temp" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 30px ' + acTempColor(curTemp) + ',0 0 60px ' + acTempColor(curTemp) + '">' + curTemp.toFixed(1) + '<span class="dial-deg">&#176;</span></div>'
++ '  <div class="dial-feel" id="live-comfort">' + comfortTxt + '</div>'
 + '</div>'
 + '</div>'
 
@@ -2276,6 +2890,18 @@ class AcControllerCardV2 extends HTMLElement {
 + '  <span class="temp-set">' + setTemp + '&#176;C</span>'
 + '  <button class="temp-btn" id="btn-temp-up">+</button>'
 + '</div>'
++ (function() {
+    if (hvac !== 'cool' || !isOn) return '';
+    var eta = this._calcEta(this._activeIdx, setTemp, curTemp, fanMode);
+    if (!eta) return '';
+    var lang2 = cfg.language || 'vi';
+    var prefix = eta.mode === 'estimated' ? '⏱~ ' : '⏱ ';
+    var etaTxt = lang2 === 'vi'
+      ? prefix + 'Dự kiến đạt ' + setTemp + '°C trong ' + eta.eta + ' phút'
+      : prefix + 'Est. ' + setTemp + '°C in ' + eta.eta + ' min';
+    var tipTxt = eta.mode === 'estimated' ? 'title="Ước tính theo tốc độ quạt, sẽ chính xác hơn khi có dữ liệu thực tế"' : '';
+    return '<div class="eta-bar" id="live-eta" ' + tipTxt + '>' + etaTxt + '</div>';
+  }).call(this)
 
 + (modeBtns ? '<div class="mode-grid">' + modeBtns + '</div>' : '')
 
@@ -2283,7 +2909,7 @@ class AcControllerCardV2 extends HTMLElement {
   '<div class="fan-swing-row">'
 + (cfg.show_fan !== false ? (
   '  <div class="fan-card">'
-+ '    <div class="fc-head"><span class="fc-label">' + tr.fanLabel + '</span><span class="fc-val">' + currentFanLabel + '</span></div>'
++ '    <div class="fc-head"><span class="fc-label">' + tr.fanLabel + '</span><span class="fc-val">' + (fanLabels[fi] || fanMode) + '</span></div>'
 + '    <button class="fan-tap" id="btn-fan-cycle">'
 + '      <span class="fan-ico">' + fanIconSvg + '</span>'
 + '      <div class="fan-bars">' + fanBarHtml + '</div>'
@@ -2338,7 +2964,7 @@ class AcControllerCardV2 extends HTMLElement {
 + '    <span class="ac-overlay-txt">' + (isOn ? tr.overlayOn : tr.overlayOff) + '</span>'
 + modeChip
 + '  </div>'
-+ '  <div class="img-temp-badge" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 18px ' + acTempColor(curTemp) + ',0 0 40px ' + acTempColor(curTemp) + ',0 2px 20px rgba(0,0,0,0.7)">' + Math.round(curTemp) + '<span>&#176;C</span>'
++ '  <div class="img-temp-badge" style="color:' + acTempColor(curTemp) + ';text-shadow:0 0 18px ' + acTempColor(curTemp) + ',0 0 40px ' + acTempColor(curTemp) + ',0 2px 20px rgba(0,0,0,0.7)">' + curTemp.toFixed(1) + '<span>&#176;C</span>'
 + (roomHumidityRaw > 0 ? '<span style="font-family:\'Sora\',sans-serif;font-size:13px;font-weight:500;opacity:0.75;margin-left:6px;vertical-align:middle;">💧' + Math.round(roomHumidityRaw) + '%</span>' : '')
 + '</div>'
 + '  <div class="img-room-name">' + room.label + '</div>'
@@ -2411,11 +3037,12 @@ class AcControllerCardV2 extends HTMLElement {
       container.id = 'ac-card-root';
       this.shadowRoot.appendChild(container);
     }
-    container.innerHTML = html;
+    container.innerHTML = '<div class="card-scale-wrap" id="ac-scale-wrap">' + html + '</div>';
 
     this._initialized = true;
     this._bind();
     this._startClock();
+    if (this._applyScale) { var _asSelf = this; requestAnimationFrame(function(){ _asSelf._applyScale(); }); }
   }
 
   _bind() {
@@ -2490,6 +3117,20 @@ class AcControllerCardV2 extends HTMLElement {
       }));
     });
 
+    // View mode switcher (full/lite header)
+    onTap(r.getElementById('hdr-vs-full'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'full' });
+      self._renderFull();
+    });
+    onTap(r.getElementById('hdr-vs-lite'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'lite' });
+      self._renderFull();
+    });
+    onTap(r.getElementById('hdr-vs-superlite'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'super_lite' });
+      self._renderFull();
+    });
+
     var ecoFn = function() {
       var id = ROOMS[self._activeIdx].id;
       self._call('climate','set_preset_mode',{entity_id:id, preset_mode: self._a(id,'preset_mode')==='eco'?'none':'eco'});
@@ -2500,7 +3141,6 @@ class AcControllerCardV2 extends HTMLElement {
     onTap(r.getElementById('btn-fan-cycle'), function() {
       var id = ROOMS[self._activeIdx].id;
       var cur = self._a(id,'fan_mode') || 'auto';
-      // Dùng fan_modes từ attribute (danh sách thực tế entity hỗ trợ), fallback về FAN_LEVELS
       var supported = self._a(id,'fan_modes');
       var levels = (Array.isArray(supported) && supported.length > 0) ? supported : FAN_LEVELS;
       var idx = levels.indexOf(cur);
@@ -2510,35 +3150,13 @@ class AcControllerCardV2 extends HTMLElement {
 
     onTap(r.getElementById('btn-swing'), function() {
       var id = ROOMS[self._activeIdx].id;
-      var cfg2 = self._config || {};
-      var roomCfg = (cfg2.entities && cfg2.entities[self._activeIdx]) || {};
-      var vaneVertEntity = roomCfg.vane_vertical_entity || cfg2.vane_vertical_entity || null;
-      var vaneHorizEntity = roomCfg.vane_horizontal_entity || cfg2.vane_horizontal_entity || null;
-      if (vaneVertEntity && self._hass && self._hass.states[vaneVertEntity]) {
-        var vaneState = self._hass.states[vaneVertEntity];
-        var options = vaneState.attributes.options || [];
-        if (options.length > 0) {
-          var curIdx = options.indexOf(vaneState.state);
-          var nextOpt = options[(curIdx + 1) % options.length];
-          self._call('input_select','select_option',{entity_id:vaneVertEntity, option:nextOpt});
-        }
-      } else if (vaneHorizEntity && self._hass && self._hass.states[vaneHorizEntity]) {
-        var vaneState2 = self._hass.states[vaneHorizEntity];
-        var options2 = vaneState2.attributes.options || [];
-        if (options2.length > 0) {
-          var curIdx2 = options2.indexOf(vaneState2.state);
-          var nextOpt2 = options2[(curIdx2 + 1) % options2.length];
-          self._call('input_select','select_option',{entity_id:vaneHorizEntity, option:nextOpt2});
-        }
-      } else {
-        // Fallback: cycle swing_mode
-        var cur = self._a(id,'swing_mode') || 'off';
-        var supported = self._a(id,'swing_modes');
-        var levels = (Array.isArray(supported) && supported.length > 0) ? supported : SWING_LEVELS;
-        var idx = levels.indexOf(cur);
-        var next = levels[(idx + 1) % levels.length];
-        self._call('climate','set_swing_mode',{entity_id:id, swing_mode:next});
-      }
+      var cur = self._a(id,'swing_mode') || 'off';
+      // Dùng swing_modes từ attribute (danh sách thực tế entity hỗ trợ), fallback về SWING_LEVELS
+      var supported = self._a(id,'swing_modes');
+      var levels = (Array.isArray(supported) && supported.length > 0) ? supported : SWING_LEVELS;
+      var idx = levels.indexOf(cur);
+      var next = levels[(idx + 1) % levels.length];
+      self._call('climate','set_swing_mode',{entity_id:id, swing_mode:next});
     });
 
     // btn-power-lite (lite mode) — same action as btn-power
@@ -2642,6 +3260,95 @@ class AcControllerCardV2 extends HTMLElement {
       } else {
         self._activeIdx = newIdx; self._renderFull();
       }
+    });
+
+    // ── Tooltip phòng: inject vào document.body để thoát khỏi overflow:hidden ──
+    // CSS nằm trong Shadow DOM không apply được ra body → dùng inline style
+    if (!self._acTip) {
+      var tip = document.createElement('div');
+      tip.id = 'ac-room-tip-' + Math.random().toString(36).slice(2);
+      tip.style.cssText = [
+        'position:fixed',
+        'z-index:99999',
+        'pointer-events:none',
+        'background:rgba(6,10,28,0.96)',
+        'border:1px solid rgba(255,255,255,0.18)',
+        'border-radius:12px',
+        'padding:8px 14px',
+        'max-width:260px',
+        'white-space:normal',
+        'line-height:1.55',
+        'font-size:11px',
+        'font-weight:500',
+        "font-family:'Sora',sans-serif",
+        'box-shadow:0 6px 28px rgba(0,0,0,0.7)',
+        'opacity:0',
+        'transition:opacity 0.2s ease',
+        'display:none',
+        'backdrop-filter:blur(12px)',
+        '-webkit-backdrop-filter:blur(12px)',
+      ].join(';');
+      document.body.appendChild(tip);
+      self._acTip = tip;
+    }
+    var _acTip = self._acTip;
+    // Timer ID để auto-ẩn tooltip sau 5s — lưu trên self để clear được khi re-render
+    if (!self._tipAutoHideTimer) self._tipAutoHideTimer = null;
+    if (!self._tipFadeTimer)     self._tipFadeTimer     = null;
+
+    function _clearTipTimers() {
+      if (self._tipAutoHideTimer) { clearTimeout(self._tipAutoHideTimer); self._tipAutoHideTimer = null; }
+      if (self._tipFadeTimer)     { clearTimeout(self._tipFadeTimer);     self._tipFadeTimer     = null; }
+    }
+
+    function _hideTipNow() {
+      _clearTipTimers();
+      _acTip.style.opacity = '0';
+      self._tipFadeTimer = setTimeout(function() { _acTip.style.display = 'none'; }, 200);
+    }
+
+    function _showRoomTip(btn) {
+      var msg = btn.dataset.tip;
+      if (!msg) { _hideTipNow(); return; }
+      // Hủy timer cũ trước khi show lại (tránh nháy)
+      _clearTipTimers();
+      var color = btn.dataset.tipColor || '#fff';
+      _acTip.textContent = msg;
+      _acTip.style.color = color;
+      _acTip.style.display = 'block';
+      _acTip.style.opacity = '0';
+      // Định vị tooltip — ưu tiên bên phải button, fallback bên trái
+      var rect = btn.getBoundingClientRect();
+      var tipTop  = rect.top + rect.height / 2;
+      var tipLeft = rect.right + 12;
+      _acTip.style.top       = tipTop + 'px';
+      _acTip.style.left      = tipLeft + 'px';
+      _acTip.style.transform = 'translateY(-50%)';
+      // Dùng double rAF để đảm bảo display:block đã được paint xong trước khi đọc offsetWidth
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          var tw = _acTip.offsetWidth || 220;
+          if (tipLeft + tw > window.innerWidth - 8) {
+            _acTip.style.left = (rect.left - tw - 12) + 'px';
+          }
+          _acTip.style.opacity = '1';
+          // Auto-ẩn sau 5 giây (mobile: không có mouseleave)
+          _clearTipTimers();
+          self._tipAutoHideTimer = setTimeout(function() { _hideTipNow(); }, 5000);
+        });
+      });
+    }
+
+    r.querySelectorAll('[data-room]').forEach(function(btn) {
+      // Desktop: hover bình thường
+      btn.addEventListener('mouseenter', function() { _showRoomTip(btn); });
+      btn.addEventListener('mouseleave', function() { _hideTipNow(); });
+      // Mobile: touchstart show tooltip, KHÔNG gọi _hideTipNow ngay lập tức
+      // Timer 5s sẽ tự ẩn — tránh race condition nháy loạn
+      btn.addEventListener('touchstart', function(e) {
+        // Chỉ show tooltip, không can thiệp vào logic chọn phòng
+        _showRoomTip(btn);
+      }, { passive: true });
     });
 
     this._bindTimer();
@@ -2902,6 +3609,20 @@ class AcControllerCardV2 extends HTMLElement {
       }));
     });
 
+    // View mode switcher (super lite)
+    onTapSL(r.getElementById('sl-vs-full'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'full' });
+      self._renderFull();
+    });
+    onTapSL(r.getElementById('sl-vs-lite'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'lite' });
+      self._renderFull();
+    });
+    onTapSL(r.getElementById('sl-vs-superlite'), function() {
+      self._config = Object.assign({}, self._config, { view_mode: 'super_lite' });
+      self._renderFull();
+    });
+
     // Mode dropdown (native select — Normal style)
     var modeSelect = r.getElementById('sl-mode-select');
     if (modeSelect) {
@@ -3078,22 +3799,30 @@ class AcControllerCardV2 extends HTMLElement {
       _slInjectStyles(isWave);
 
       var modeList = ['off','cool','heat','dry','fan_only'];
+      var slModeShowMap2 = { cool: 'show_cool', heat: 'show_heat', dry: 'show_dry', fan_only: 'show_fan_only' };
       var curHvac  = self._s(ROOMS[self._activeIdx].id);
       var itemsHtml = isWave ? '' : '<div class="sl-pop-shimmer"></div>';
       for (var mi = 0; mi < modeList.length; mi++) {
         var mk2  = modeList[mi];
+        if (mk2 !== 'off' && (self._config && self._config[slModeShowMap2[mk2]] === false)) continue;
         var mcfg = MODE_CFG[mk2] || MODE_CFG.off;
         var mlbl = tr2.modes[mk2] || mcfg.lbl;
         var delay = (mi * 0.04 + 0.03).toFixed(2) + 's';
         if (isWave) {
+          var icHtml3 = (mcfg.icon && mcfg.icon.indexOf('mdi:') === 0)
+            ? '<ha-icon icon="' + mcfg.icon + '" style="--mdc-icon-size:20px;--mdc-icon-color:' + mcfg.color + ';width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;color:' + mcfg.color + '"></ha-icon>'
+            : '<span style="font-size:18px;line-height:1">' + mcfg.icon + '</span>';
           itemsHtml += '<div class="sl-ri sl-ri-wave' + (curHvac === mk2 ? ' active' : '') + '" data-mode-val="' + mk2 + '" style="animation-delay:' + delay + '">'
-            + '<span style="font-size:18px;line-height:1;width:22px;text-align:center">' + mcfg.icon + '</span>'
+            + '<span style="width:22px;text-align:center;display:inline-flex;align-items:center;justify-content:center">' + icHtml3 + '</span>'
             + '<span style="flex:1">' + mlbl + '</span>'
             + '<div class="sl-wave-ripple"></div>'
             + '</div>';
         } else {
+          var icHtml4 = (mcfg.icon && mcfg.icon.indexOf('mdi:') === 0)
+            ? '<ha-icon icon="' + mcfg.icon + '" style="--mdc-icon-size:20px;--mdc-icon-color:' + mcfg.color + ';width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;color:' + mcfg.color + '"></ha-icon>'
+            : '<span style="font-size:18px;line-height:1">' + mcfg.icon + '</span>';
           itemsHtml += '<div class="sl-ri' + (curHvac === mk2 ? ' active' : '') + '" data-mode-val="' + mk2 + '" style="animation-delay:' + delay + '">'
-            + '<span style="font-size:18px;line-height:1;width:22px;text-align:center">' + mcfg.icon + '</span>'
+            + '<span style="width:22px;text-align:center;display:inline-flex;align-items:center;justify-content:center">' + icHtml4 + '</span>'
             + '<span style="flex:1">' + mlbl + '</span>'
             + '</div>';
         }
@@ -3216,18 +3945,23 @@ class AcControllerCardV2 extends HTMLElement {
         var ri2State = self._s(ROOMS[ri2].id);
         var ri2On = ri2State !== 'off';
         var ri2Temp = parseFloat(self._a(ROOMS[ri2].id, 'current_temperature') || 0);
-        var ri2TempStr = ri2Temp > 0 ? ' · ' + Math.round(ri2Temp) + '°' : '';
-        var ri2Label = ROOMS[ri2].icon + ' ' + ROOMS[ri2].label + ri2TempStr;
+        var ri2TempStr = ri2Temp > 0 ? ' · ' + ri2Temp.toFixed(1) + '°' : '';
+        var ri2HumRaw = parseFloat(self._a(ROOMS[ri2].id, 'current_humidity') || self._a(ROOMS[ri2].id, 'humidity') || 0);
+        var ri2EntH = (self._config && self._config.entities && self._config.entities[ri2]) || {};
+        if (ri2EntH.humidity_entity && self._hass && self._hass.states[ri2EntH.humidity_entity]) { var ri2HS = parseFloat(self._hass.states[ri2EntH.humidity_entity].state); if (!isNaN(ri2HS)) ri2HumRaw = ri2HS; }
+        var ri2HumStr = ri2HumRaw > 0 ? ' · 💧' + Math.round(ri2HumRaw) + '%' : '';
+        var ri2IconHtml = self._mdiIcon(ROOMS[ri2].icon, 18);
+        var ri2LabelText = ROOMS[ri2].label + ri2TempStr + ri2HumStr;
         var delay = (ri2 * 0.03 + 0.03).toFixed(2) + 's';
         if (isWave) {
           itemsHtml += '<div class="sl-ri sl-ri-wave' + (ri2 === self._activeIdx ? ' active' : '') + '" data-room-idx="' + ri2 + '" style="animation-delay:' + delay + '">'
-            + '<span style="flex:1">' + ri2Label + '</span>'
+            + '<span style="flex:1;display:flex;align-items:center;gap:6px">' + ri2IconHtml + '<span>' + ri2LabelText + '</span></span>'
             + '<span class="sl-ri-badge ' + (ri2On ? 'on' : 'off') + '">' + (ri2On ? 'ON' : 'OFF') + '</span>'
             + '<div class="sl-wave-ripple"></div>'
             + '</div>';
         } else {
           itemsHtml += '<div class="sl-ri' + (ri2 === self._activeIdx ? ' active' : '') + '" data-room-idx="' + ri2 + '" style="animation-delay:' + delay + '">'
-            + '<span style="flex:1">' + ri2Label + '</span>'
+            + '<span style="flex:1;display:flex;align-items:center;gap:6px">' + ri2IconHtml + '<span>' + ri2LabelText + '</span></span>'
             + '<span class="sl-ri-badge ' + (ri2On ? 'on' : 'off') + '">' + (ri2On ? 'ON' : 'OFF') + '</span>'
             + '</div>';
         }
@@ -3289,6 +4023,142 @@ class AcControllerCardV2 extends HTMLElement {
     // Clean up listener when card is disconnected — chain with any existing cleanup (e.g. mode popup)
     var prevCleanup = self._slCleanup;
     self._slCleanup = function() { document.removeEventListener('click', onOutsideClick); closeRoomPopup(); if (prevCleanup) prevCleanup(); };
+  }
+
+  // ── Interval 10s: cập nhật nhiệt độ thực tế + ETA kể cả khi HA không push ──
+  _startRefresh() {
+    if (this._refreshInt) return; // đã có rồi
+    var self = this;
+    this._refreshInt = setInterval(function() {
+      if (!self._hass || !self._initialized) return;
+      var h = self._hass;
+      var nowMs = Date.now();
+      var histDirty = false;
+
+      // Ghi lịch sử nhiệt độ cho tất cả phòng (giống logic trong set hass)
+      for (var ri = 0; ri < ROOMS.length; ri++) {
+        var rid = ROOMS[ri].id;
+        var rTemp = parseFloat(self._attrOf(h, rid, 'current_temperature'));
+        var rMode = self._stateOf(h, rid);
+        if (!isNaN(rTemp) && rMode === 'cool') {
+          if (!self._tempHistory[ri]) self._tempHistory[ri] = [];
+          var hist = self._tempHistory[ri];
+          var last = hist[hist.length - 1];
+          // Ghi điểm mới mỗi 10s (kể cả nếu nhiệt độ không đổi — để track thời gian thực)
+          if (!last || (nowMs - last.t) >= 9000) {
+            if (!last || Math.abs(last.temp - rTemp) >= 0.01 || (nowMs - last.t) >= 30000) {
+              hist.push({ t: nowMs, temp: rTemp });
+              if (hist.length > 60) hist.splice(0, hist.length - 60);
+              histDirty = true;
+            }
+          }
+        }
+      }
+      if (histDirty) {
+        try { localStorage.setItem('ac_temp_history_v2', JSON.stringify(self._tempHistory)); } catch(e) {}
+      }
+
+      // Patch chỉ các element thay đổi — KHÔNG rebuild toàn bộ DOM → không nháy
+      self._patchLiveData();
+    }, 10000);
+  }
+
+  // ── Patch các element hiển thị live mà không rebuild toàn bộ card ────────
+  _patchLiveData() {
+    if (!this._hass || !this._initialized) return;
+    var sr = this.shadowRoot;
+    if (!sr) return;
+
+    var cfg     = this._config || {};
+    var lang    = cfg.language || 'vi';
+    var tr      = AC_TRANSLATIONS[lang] || AC_TRANSLATIONS.vi;
+    var room    = ROOMS[this._activeIdx];
+    var hvac    = this._s(room.id);
+    var isOn    = hvac !== 'off';
+    var curTemp = parseFloat(this._a(room.id, 'current_temperature') || 26);
+    var setTemp = parseFloat(this._a(room.id, 'temperature') || 24);
+    var fanMode = this._a(room.id, 'fan_mode') || 'auto';
+
+    // Nhiệt độ thực tế từ cảm biến riêng nếu có
+    var roomEntCfg = (cfg.entities && cfg.entities[this._activeIdx]) || {};
+    if (roomEntCfg.temp_entity && this._hass.states[roomEntCfg.temp_entity]) {
+      var st = parseFloat(this._hass.states[roomEntCfg.temp_entity].state);
+      if (!isNaN(st)) curTemp = st;
+    }
+
+    // ── Patch nhiệt độ hiển thị ──────────────────────────────────────────
+    var tempEl = sr.getElementById('live-cur-temp');
+    if (tempEl) {
+      var color = acTempColor(curTemp);
+      tempEl.style.color = color;
+      tempEl.style.textShadow = '0 0 30px ' + color + ',0 0 60px ' + color;
+      // Giữ nguyên thẻ con (span °), chỉ cập nhật text node đầu
+      var firstNode = tempEl.firstChild;
+      var tempStr = curTemp.toFixed(1);
+      if (firstNode && firstNode.nodeType === 3) {
+        if (firstNode.textContent !== tempStr) firstNode.textContent = tempStr;
+      }
+    }
+
+    // ── Patch comfort text ───────────────────────────────────────────────
+    var comfortEl = sr.getElementById('live-comfort');
+    if (comfortEl) {
+      var comfortTxt = '';
+      if (!isOn) comfortTxt = tr.comfort && tr.comfort.off ? tr.comfort.off : '';
+      else if (hvac === 'dry') comfortTxt = tr.comfort && tr.comfort.dry ? tr.comfort.dry : '';
+      else if (hvac === 'fan_only') comfortTxt = tr.comfort && tr.comfort.fan_only ? tr.comfort.fan_only : '';
+      else comfortTxt = tr.comfortTemp ? tr.comfortTemp(curTemp) : '';
+      if (comfortEl.textContent !== comfortTxt) comfortEl.textContent = comfortTxt;
+    }
+
+    // ── Patch ETA bar ─────────────────────────────────────────────────────
+    var etaEl = sr.getElementById('live-eta');
+    if (hvac === 'cool' && isOn) {
+      var eta = this._calcEta(this._activeIdx, setTemp, curTemp, fanMode);
+      if (eta) {
+        var prefix = eta.mode === 'estimated' ? '⏱~ ' : '⏱ ';
+        var etaTxt = lang === 'vi'
+          ? prefix + 'Dự kiến đạt ' + setTemp + '°C trong ' + eta.eta + ' phút'
+          : prefix + 'Est. ' + setTemp + '°C in ' + eta.eta + ' min';
+        if (etaEl) {
+          if (etaEl.textContent !== etaTxt) etaEl.textContent = etaTxt;
+          etaEl.style.display = '';
+        } else {
+          // ETA element chưa tồn tại (lần đầu điều kiện đúng) → cần full render
+          this._renderFull();
+          return;
+        }
+      } else if (etaEl) {
+        etaEl.style.display = 'none';
+      }
+    } else if (etaEl) {
+      etaEl.style.display = 'none';
+    }
+
+    // ── Patch sensor values (outdoor temp, humidity, power) ──────────────
+    var outdoorEl = sr.getElementById('met-outdoor-temp');
+    if (outdoorEl && cfg.outdoor_temp_entity && this._hass.states[cfg.outdoor_temp_entity]) {
+      var ov = parseFloat(this._hass.states[cfg.outdoor_temp_entity].state).toFixed(1) + '°';
+      if (outdoorEl.textContent !== ov) outdoorEl.textContent = ov;
+    }
+    var humEl = sr.getElementById('met-humidity');
+    if (humEl && cfg.humidity_entity && this._hass.states[cfg.humidity_entity]) {
+      var hv = Math.round(parseFloat(this._hass.states[cfg.humidity_entity].state)) + '%';
+      if (humEl.textContent !== hv) humEl.textContent = hv;
+    }
+    var powEl = sr.getElementById('met-power');
+    if (powEl) {
+      var powerEnt = (roomEntCfg.power_entity) || cfg.power_entity;
+      if (powerEnt && this._hass.states[powerEnt]) {
+        var rawPow = parseFloat(this._hass.states[powerEnt].state);
+        var useKw = (cfg.power_unit || 'kW') === 'kW';
+        var pv = isNaN(rawPow) ? '--'
+          : (useKw
+              ? (rawPow >= 1000 ? (rawPow / 1000).toFixed(2) + ' kW' : rawPow.toFixed(0) + ' W')
+              : rawPow.toFixed(0) + ' W');
+        if (powEl.textContent !== pv) powEl.textContent = pv;
+      }
+    }
   }
 
   _startClock() {
@@ -3529,8 +4399,14 @@ class AcControllerCardV2 extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (this._clockInt) { clearInterval(this._clockInt); this._clockInt = null; }
+    if (this._clockInt)   { clearInterval(this._clockInt);   this._clockInt   = null; }
+    if (this._refreshInt) { clearInterval(this._refreshInt); this._refreshInt = null; }
     if (this._slCleanup) { this._slCleanup(); this._slCleanup = null; }
+    if (this._scaleObs) { this._scaleObs.disconnect(); this._scaleObs = null; }
+    // Clear tooltip timers
+    if (this._tipAutoHideTimer) { clearTimeout(this._tipAutoHideTimer); this._tipAutoHideTimer = null; }
+    if (this._tipFadeTimer)     { clearTimeout(this._tipFadeTimer);     this._tipFadeTimer     = null; }
+    if (this._acTip && this._acTip.parentNode) { this._acTip.parentNode.removeChild(this._acTip); this._acTip = null; }
     var self = this;
     Object.keys(this._timers).forEach(function(idx) {
       var t = self._timers[idx];
@@ -3586,7 +4462,6 @@ class MultiAcCardEditor extends HTMLElement {
   // ── Inject hass vào mọi ha-entity-picker ───────────────────────────────────
   _syncPickers() {
     if (!this._hass || !this.shadowRoot) return;
-    const ents = this._config.entities || [];
     const apply = () => {
       this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(p => {
         p.hass = this._hass;
@@ -3598,48 +4473,37 @@ class MultiAcCardEditor extends HTMLElement {
         if (domain) p.includeDomains = [domain];
         const key   = p.dataset.key;
         const saved = this._config[key] || '';
-        if (p.value !== saved) {
+        if (saved && p.value !== saved) {
           p.value = saved;
           p.setAttribute('value', saved);
         }
       });
-      // entity pickers cho từng room (climate entity)
+      // entity pickers cho từng room
       this.shadowRoot.querySelectorAll('ha-entity-picker[data-room]').forEach(p => {
         p.hass = this._hass;
         p.includeDomains = ['climate'];
         const idx   = parseInt(p.dataset.room);
+        const ents  = this._config.entities || [];
         const saved = (ents[idx] && ents[idx].entity_id) || '';
-        if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
+        if (saved && p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
       });
       // room temp sensor pickers
       this.shadowRoot.querySelectorAll('ha-entity-picker[data-room-temp]').forEach(p => {
         p.hass = this._hass;
         p.includeDomains = ['sensor'];
         const idx   = parseInt(p.dataset.roomTemp);
+        const ents  = this._config.entities || [];
         const saved = (ents[idx] && ents[idx].temp_entity) || '';
-        if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
+        if (saved && p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
       });
       // room humidity sensor pickers
       this.shadowRoot.querySelectorAll('ha-entity-picker[data-room-hum]').forEach(p => {
         p.hass = this._hass;
         p.includeDomains = ['sensor'];
         const idx   = parseInt(p.dataset.roomHum);
+        const ents  = this._config.entities || [];
         const saved = (ents[idx] && ents[idx].humidity_entity) || '';
-        if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
-      });
-      // room vane vertical entity pickers
-      this.shadowRoot.querySelectorAll('ha-entity-picker[data-room-vane-vert]').forEach(p => {
-        p.hass = this._hass;
-        const idx   = parseInt(p.dataset.roomVaneVert);
-        const saved = (ents[idx] && ents[idx].vane_vertical_entity) || '';
-        if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
-      });
-      // room vane horizontal entity pickers
-      this.shadowRoot.querySelectorAll('ha-entity-picker[data-room-vane-horiz]').forEach(p => {
-        p.hass = this._hass;
-        const idx   = parseInt(p.dataset.roomVaneHoriz);
-        const saved = (ents[idx] && ents[idx].vane_horizontal_entity) || '';
-        if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
+        if (saved && p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
       });
     };
     // Đảm bảo ha-entity-picker đã load trước khi sync
@@ -3720,11 +4584,10 @@ class MultiAcCardEditor extends HTMLElement {
     for (let i = 0; i < roomCount; i++) {
       const ent   = entities[i] || {};
       const defLbl = (t.rooms && t.rooms[i]) || ('Room ' + (i+1));
-      const dispLbl = ent.label || defLbl;
-      const defIco = (t.roomIcons && t.roomIcons[i]) || '❄';
+      const defIco = (t.roomIcons && t.roomIcons[i]) || 'mdi:snowflake';
       roomRows += `
 <div class="ac-row">
-  <div class="ac-row-title" id="ac-row-title-${i}">❄ ${t.edRooms.replace(/^❄\s*/,'')} ${i+1} – ${dispLbl}</div>
+  <div class="ac-row-title">❄ ${t.edRooms.replace(/^❄\s*/,'')} ${i+1} – ${defLbl}</div>
   <div class="row">
     <label>${t.edAcEntity}</label>
     <ha-entity-picker data-room="${i}" data-domain="climate" allow-custom-entity></ha-entity-picker>
@@ -3738,12 +4601,8 @@ class MultiAcCardEditor extends HTMLElement {
     <ha-entity-picker data-room-hum="${i}" data-domain="sensor" allow-custom-entity></ha-entity-picker>
   </div>
   <div class="row">
-    <label>${t.edVaneVertical || '↕ Vertical vane (input_select)'}</label>
-    <ha-entity-picker data-room-vane-vert="${i}" allow-custom-entity></ha-entity-picker>
-  </div>
-  <div class="row">
-    <label>${t.edVaneHorizontal || '↔ Horizontal vane (input_select)'}</label>
-    <ha-entity-picker data-room-vane-horiz="${i}" allow-custom-entity></ha-entity-picker>
+    <label>${t.edRoomPowerEntity || '⚡ Room power sensor (sensor.*)'}</label>
+    <ha-entity-picker data-room-power="${i}" data-domain="sensor" allow-custom-entity></ha-entity-picker>
   </div>
   <div class="row">
     <label>${t.edAcName}</label>
@@ -3839,7 +4698,7 @@ class MultiAcCardEditor extends HTMLElement {
 </style>
 <div class="editor">
   <div class="credit">❄️ <strong>Multi Air Conditioner Card</strong>
-    <span style="color:var(--secondary-text-color);font-weight:400;">v1.4 Designed by @doanlong1412 from 🇻🇳 Vietnam</span>
+    <span style="color:var(--secondary-text-color);font-weight:400;">v1.6 Designed by @doanlong1412 from 🇻🇳 Vietnam</span>
   </div>
 
   <!-- 0. Owner name -->
@@ -3914,6 +4773,36 @@ class MultiAcCardEditor extends HTMLElement {
           color:${(this._config.popup_style)==='wave' ? '#fff' : 'var(--secondary-text-color)'};">${t.edPopupWave || 'Wave'}</button>
       </div>
     </div>
+  </div>
+
+  <!-- 1b-3. Fan/Swing in Super Lite (chỉ hiện khi Super Lite) -->
+  <div class="acc-wrap" style="margin-top:4px">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--secondary-background-color);">
+      <ha-icon icon="mdi:fan" style="color:var(--secondary-text-color);--mdi-icon-size:18px;"></ha-icon>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:var(--primary-text-color);">${t.edShowSlFan || '💨 Fan speed (Super Lite)'}</div>
+        <div style="font-size:11px;color:var(--secondary-text-color);margin-top:2px">${t.edShowSlFanDesc || 'Show fan button in Super Lite'}</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0">
+        <input type="checkbox" id="tog-show-sl-fan" ${this._config.show_sl_fan !== false ? 'checked' : ''} style="opacity:0;width:0;height:0;position:absolute">
+        <span style="position:absolute;inset:0;border-radius:20px;cursor:pointer;transition:0.25s;background:${this._config.show_sl_fan !== false ? 'var(--primary-color)' : 'rgba(0,0,0,0.18)'}"></span>
+        <span style="position:absolute;top:2px;left:${this._config.show_sl_fan !== false ? '18px' : '2px'};width:16px;height:16px;border-radius:50%;background:#fff;transition:0.25s;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></span>
+      </label>
+    </div>
+  </div>
+  <div class="acc-wrap" style="margin-top:4px">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--secondary-background-color);">
+      <ha-icon icon="mdi:arrow-oscillating" style="color:var(--secondary-text-color);--mdi-icon-size:18px;"></ha-icon>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:var(--primary-text-color);">${t.edShowSlSwing || '🔄 Airflow (Super Lite)'}</div>
+        <div style="font-size:11px;color:var(--secondary-text-color);margin-top:2px">${t.edShowSlSwingDesc || 'Show airflow button in Super Lite'}</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0">
+        <input type="checkbox" id="tog-show-sl-swing" ${this._config.show_sl_swing !== false ? 'checked' : ''} style="opacity:0;width:0;height:0;position:absolute">
+        <span style="position:absolute;inset:0;border-radius:20px;cursor:pointer;transition:0.25s;background:${this._config.show_sl_swing !== false ? 'var(--primary-color)' : 'rgba(0,0,0,0.18)'}"></span>
+        <span style="position:absolute;top:2px;left:${this._config.show_sl_swing !== false ? '18px' : '2px'};width:16px;height:16px;border-radius:50%;background:#fff;transition:0.25s;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></span>
+      </label>
+    </div>
   </div>` : ''}
 
   <!-- 1c. Display Options accordion -->
@@ -3944,6 +4833,7 @@ class MultiAcCardEditor extends HTMLElement {
         ['show_timer',        t.edShowTimer,        t.edShowTimerDesc],
         null,
         ['show_room_env',     t.edShowRoomEnv,      t.edShowRoomEnvDesc],
+        ['show_sl_room_power',t.edShowSlRoomPower,  t.edShowSlRoomPowerDesc],
       ].map(item => {
         if (!item) return '<div style="height:1px;background:var(--divider-color,rgba(0,0,0,0.08));margin:4px 0;"></div>';
         const [key, label, desc] = item;
@@ -3966,10 +4856,15 @@ class MultiAcCardEditor extends HTMLElement {
           </label>
         </div>`;
       }).join('')}
+      <div style="margin-top:10px;padding:8px 2px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;font-size:12.5px;font-weight:500;color:var(--primary-text-color);">${t.edPowerUnit || '⚡ Power unit'}</div>
+        <select id="sel-power-unit" style="background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;">
+          <option value="kw" ${(this._config.power_unit||'kw')==='kw'?'selected':''}>${t.edPowerUnitKw||'kW'}</option>
+          <option value="w"  ${(this._config.power_unit||'kw')==='w' ?'selected':''}>${t.edPowerUnitW ||'W' }</option>
+        </select>
+      </div>
     </div>
   </div>
-
-  <!-- 2. Số phòng -->
   <div class="acc-wrap">
     <div class="acc-head" id="head-roomcount">
       <ha-icon icon="mdi:home-group"></ha-icon> ${t.edRoomsHeader(roomCount)}
@@ -4012,9 +4907,6 @@ class MultiAcCardEditor extends HTMLElement {
       ${this._entityField('outdoor_temp_entity',   t.edOutdoorTemp, 'sensor')}
       ${this._entityField('humidity_entity',       t.edHumidity,    'sensor')}
       ${this._entityField('power_entity',          t.edPower,       'sensor')}
-      <div style="height:1px;background:var(--divider-color,rgba(0,0,0,0.08));margin:8px 0;"></div>
-      ${this._entityField('vane_vertical_entity',   t.edVaneVerticalGlobal || '↕ Vertical vane (default)', '')}
-      ${this._entityField('vane_horizontal_entity', t.edVaneHorizontalGlobal || '↔ Horizontal vane (default)', '')}
     </div>
   </div>
 
@@ -4179,9 +5071,6 @@ class MultiAcCardEditor extends HTMLElement {
         while (ents.length <= i) ents.push({});
         ents[i] = { ...ents[i], label: val };
         this._config = { ...this._config, entities: ents };
-        // Live update title
-        const titleEl = sr.getElementById('ac-row-title-' + i);
-        if (titleEl) titleEl.textContent = '❄ ' + t.edRooms.replace(/^❄\s*/, '') + ' ' + (i+1) + ' – ' + (val || ((t.rooms && t.rooms[i]) || ('Room ' + (i+1))));
       });
       wireTextInput(iconEl, val => {
         const ents = (this._config.entities || []).slice();
@@ -4253,31 +5142,25 @@ class MultiAcCardEditor extends HTMLElement {
         this._fire();
       }));
 
-    // ha-entity-picker: room vane vertical entity
-    sr.querySelectorAll('ha-entity-picker[data-room-vane-vert]').forEach(picker =>
+    // ha-entity-picker: room power sensor
+    sr.querySelectorAll('ha-entity-picker[data-room-power]').forEach(picker =>
       picker.addEventListener('value-changed', e => {
-        const idx = parseInt(picker.dataset.roomVaneVert);
+        const idx = parseInt(picker.dataset.roomPower);
         const val = e.detail.value;
         const ents = (this._config.entities || []).slice();
         while (ents.length <= idx) ents.push({});
-        if (val) ents[idx] = { ...ents[idx], vane_vertical_entity: val };
-        else delete ents[idx].vane_vertical_entity;
+        if (val) ents[idx] = { ...ents[idx], power_entity: val };
+        else delete ents[idx].power_entity;
         this._config = { ...this._config, entities: ents };
         this._fire();
       }));
 
-    // ha-entity-picker: room vane horizontal entity
-    sr.querySelectorAll('ha-entity-picker[data-room-vane-horiz]').forEach(picker =>
-      picker.addEventListener('value-changed', e => {
-        const idx = parseInt(picker.dataset.roomVaneHoriz);
-        const val = e.detail.value;
-        const ents = (this._config.entities || []).slice();
-        while (ents.length <= idx) ents.push({});
-        if (val) ents[idx] = { ...ents[idx], vane_horizontal_entity: val };
-        else delete ents[idx].vane_horizontal_entity;
-        this._config = { ...this._config, entities: ents };
-        this._fire();
-      }));
+    // power unit select
+    const selPowerUnit = sr.getElementById('sel-power-unit');
+    if (selPowerUnit) selPowerUnit.addEventListener('change', () => {
+      this._config = { ...this._config, power_unit: selPowerUnit.value };
+      this._fire(); this._render();
+    });
 
     // ha-entity-picker: sensor entities
     sr.querySelectorAll('ha-entity-picker[data-key]').forEach(picker =>
@@ -4330,6 +5213,21 @@ class MultiAcCardEditor extends HTMLElement {
     const psWave = sr.getElementById('ps-wave');
     if (psWave) psWave.addEventListener('click', () => {
       this._config = { ...this._config, popup_style: 'wave' };
+      this._fire(); this._render();
+    });
+    const togSlFan = sr.getElementById('tog-show-sl-fan');
+    if (togSlFan) togSlFan.addEventListener('change', () => {
+      this._config = { ...this._config, show_sl_fan: togSlFan.checked };
+      this._fire(); this._render();
+    });
+    const togSlSwing = sr.getElementById('tog-show-sl-swing');
+    if (togSlSwing) togSlSwing.addEventListener('change', () => {
+      this._config = { ...this._config, show_sl_swing: togSlSwing.checked };
+      this._fire(); this._render();
+    });
+    const togSlRoomPower = sr.getElementById('tog-show-sl-room-power');
+    if (togSlRoomPower) togSlRoomPower.addEventListener('change', () => {
+      this._config = { ...this._config, show_sl_room_power: togSlRoomPower.checked };
       this._fire(); this._render();
     });
   }

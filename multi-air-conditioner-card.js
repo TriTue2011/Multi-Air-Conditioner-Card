@@ -1210,15 +1210,6 @@ button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-
 .hdr-title{font-size:11px;font-weight:600;letter-spacing:2px;color:rgba(255,255,255,0.85);text-transform:uppercase}
 .hdr-sub{font-size:9px;color:rgba(40,80,110,0.5);margin-top:1px}
 .hdr-icons{display:flex;gap:12px;align-items:center}
-.hdr-vs-row{display:flex;align-items:center;gap:3px}
-.hdr-view-switcher{display:flex;align-items:center;gap:3px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:3px 4px}
-.hdr-vs-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:5px 8px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.4);transition:all 0.2s;line-height:0;display:flex;align-items:center;justify-content:center}
-.hdr-vs-btn:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.25)}
-.hdr-vs-btn--active{background:rgba(255,255,255,0.18)!important;color:#ffffff!important;border-color:rgba(255,255,255,0.3)!important;box-shadow:0 1px 4px rgba(0,0,0,0.3)}
-.sl-view-switcher{display:flex;align-items:center;justify-content:flex-end;gap:3px;margin-top:4px;margin-bottom:-2px}
-.sl-vs-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:5px 8px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.4);transition:all 0.2s;line-height:0;display:flex;align-items:center;justify-content:center}
-.sl-vs-btn:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.25)}
-.sl-vs-btn--active{background:rgba(255,255,255,0.18)!important;color:#ffffff!important;border-color:rgba(255,255,255,0.3)!important;box-shadow:0 1px 6px rgba(0,0,0,0.3)}
 .greet-row{display:flex;align-items:flex-start;justify-content:space-between}
 .greet-sub{font-size:11.5px;color:rgba(255,255,255,0.65);font-weight:300}
 .greet-name{font-size:22px;font-weight:700;color:#ffffff;line-height:1.15;letter-spacing:-0.5px}
@@ -2676,11 +2667,6 @@ class AcControllerCardV2 extends HTMLElement {
         + '        <span class="sl-badge-txt">' + (slIsOn ? tr.statusOn : tr.statusOff) + '</span>'
         + '      </span>'
         + '    </div>'
-        + '    <div style="display:flex;align-items:center;gap:3px">'
-        + '      <button class="sl-vs-btn' + (cfg.view_mode !== 'super_lite' && cfg.view_mode !== 'lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-full" title="Full"><svg width="20" height="8" viewBox="0 0 20 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/><circle cx="18" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-        + '      <button class="sl-vs-btn' + (cfg.view_mode === 'lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-lite" title="Lite"><svg width="14" height="8" viewBox="0 0 14 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-        + '      <button class="sl-vs-btn' + (cfg.view_mode === 'super_lite' ? ' sl-vs-btn--active' : '') + '" id="sl-vs-superlite" title="Super Lite"><svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-        + '    </div>'
         + '  </div>'
         + '</div>'
 
@@ -2833,25 +2819,19 @@ class AcControllerCardV2 extends HTMLElement {
 + '    </button>'
 + '  </div>'
 + '</div>'
-+ '<div class="greet-row" style="' + (cfg.show_greet === false ? 'display:none;' : '') + '">'
-+ '  <div>'
-+ '    <div class="greet-sub">' + tr.greet() + '</div>'
-+ '    <div class="greet-name">' + (cfg.owner_name || 'Smart Home') + '</div>'
-+ '  </div>'
-+ '  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">'
-+ '    <div class="hdr-vs-row">'
-+ '      <button class="hdr-vs-btn' + (!isLite ? ' hdr-vs-btn--active' : '') + '" id="hdr-vs-full" title="Full"><svg width="20" height="8" viewBox="0 0 20 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/><circle cx="18" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-+ '      <button class="hdr-vs-btn' + (isLite ? ' hdr-vs-btn--active' : '') + '" id="hdr-vs-lite" title="Lite"><svg width="14" height="8" viewBox="0 0 14 8"><circle cx="2" cy="4" r="2.2" fill="currentColor"/><circle cx="10" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-+ '      <button class="hdr-vs-btn" id="hdr-vs-superlite" title="Super Lite"><svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="2.2" fill="currentColor"/></svg></button>'
-+ '    </div>'
-+ '    <button id="btn-eco" class="eco-badge ' + (ecoOn ? 'eco-on' : 'eco-off') + '">&#127807; ' + (ecoOn ? 'ECO ON' : 'ECO') + '</button>'
-+ '  </div>'
-+ '</div>'
 
 + '<div class="view-switch-row">'
 + '  <button class="view-switch-btn' + (!isLite ? ' vs-active' : '') + '" id="vs-full">Full</button>'
 + '  <button class="view-switch-btn' + (isLite ? ' vs-active' : '') + '" id="vs-lite">Lite</button>'
 + '  <button class="view-switch-btn" id="vs-superlite">&#9889; Super Lite</button>'
++ '</div>'
+
++ '<div class="greet-row" style="' + (cfg.show_greet === false ? 'display:none;' : '') + '">'
++ '  <div>'
++ '    <div class="greet-sub">' + tr.greet() + '</div>'
++ '    <div class="greet-name">' + (cfg.owner_name || 'Smart Home') + '</div>'
++ '  </div>'
++ '  <button id="btn-eco" class="eco-badge ' + (ecoOn ? 'eco-on' : 'eco-off') + '">&#127807; ' + (ecoOn ? 'ECO ON' : 'ECO') + '</button>'
 + '</div>'
 
 + '<div class="dial-wrap">'
@@ -3115,20 +3095,6 @@ class AcControllerCardV2 extends HTMLElement {
         bubbles: true, composed: true,
         detail: { entityId: entityId }
       }));
-    });
-
-    // View mode switcher (full/lite header)
-    onTap(r.getElementById('hdr-vs-full'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'full' });
-      self._renderFull();
-    });
-    onTap(r.getElementById('hdr-vs-lite'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'lite' });
-      self._renderFull();
-    });
-    onTap(r.getElementById('hdr-vs-superlite'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'super_lite' });
-      self._renderFull();
     });
 
     var ecoFn = function() {
@@ -3607,20 +3573,6 @@ class AcControllerCardV2 extends HTMLElement {
         bubbles: true, composed: true,
         detail: { entityId: ROOMS[self._activeIdx].id }
       }));
-    });
-
-    // View mode switcher (super lite)
-    onTapSL(r.getElementById('sl-vs-full'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'full' });
-      self._renderFull();
-    });
-    onTapSL(r.getElementById('sl-vs-lite'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'lite' });
-      self._renderFull();
-    });
-    onTapSL(r.getElementById('sl-vs-superlite'), function() {
-      self._config = Object.assign({}, self._config, { view_mode: 'super_lite' });
-      self._renderFull();
     });
 
     // Mode dropdown (native select — Normal style)
@@ -4764,30 +4716,6 @@ class MultiAcCardEditor extends HTMLElement {
     </div>
   </div>
 
-  <!-- 1b. View mode toggle -->
-  <div class="acc-wrap">
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;">
-      <ha-icon icon="mdi:view-split-vertical" style="color:var(--secondary-text-color);--mdi-icon-size:18px;"></ha-icon>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600;color:var(--primary-text-color);">${t.edViewMode}</div>
-      </div>
-      <div style="display:flex;gap:6px;">
-        <button id="vm-full" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;outline:none;font-family:inherit;transition:all 0.15s;
-          border:1px solid ${(this._config.view_mode||'full')==='full' ? 'var(--primary-color)' : 'var(--divider-color)'};
-          background:${(this._config.view_mode||'full')==='full' ? 'var(--primary-color)' : 'transparent'};
-          color:${(this._config.view_mode||'full')==='full' ? '#fff' : 'var(--secondary-text-color)'};">${t.edViewModeFull}</button>
-        <button id="vm-lite" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;outline:none;font-family:inherit;transition:all 0.15s;
-          border:1px solid ${(this._config.view_mode)==='lite' ? 'var(--primary-color)' : 'var(--divider-color)'};
-          background:${(this._config.view_mode)==='lite' ? 'var(--primary-color)' : 'transparent'};
-          color:${(this._config.view_mode)==='lite' ? '#fff' : 'var(--secondary-text-color)'};">${t.edViewModeLite}</button>
-        <button id="vm-super-lite" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;outline:none;font-family:inherit;transition:all 0.15s;
-          border:1px solid ${(this._config.view_mode)==='super_lite' ? 'var(--primary-color)' : 'var(--divider-color)'};
-          background:${(this._config.view_mode)==='super_lite' ? 'var(--primary-color)' : 'transparent'};
-          color:${(this._config.view_mode)==='super_lite' ? '#fff' : 'var(--secondary-text-color)'};">⚡ Super Lite</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 1b-2. Popup style (chỉ hiện khi Super Lite) -->
   ${(this._config.view_mode) === 'super_lite' ? `
   <div class="acc-wrap">
@@ -5223,23 +5151,6 @@ class MultiAcCardEditor extends HTMLElement {
         this._fire();
         this._render();
       });
-    });
-
-    // view mode toggle
-    const vmFull = sr.getElementById('vm-full');
-    const vmLite = sr.getElementById('vm-lite');
-    const vmSuperLite = sr.getElementById('vm-super-lite');
-    if (vmFull) vmFull.addEventListener('click', () => {
-      this._config = { ...this._config, view_mode: 'full' };
-      this._fire(); this._render();
-    });
-    if (vmLite) vmLite.addEventListener('click', () => {
-      this._config = { ...this._config, view_mode: 'lite' };
-      this._fire(); this._render();
-    });
-    if (vmSuperLite) vmSuperLite.addEventListener('click', () => {
-      this._config = { ...this._config, view_mode: 'super_lite' };
-      this._fire(); this._render();
     });
 
     // popup style buttons (Super Lite only)

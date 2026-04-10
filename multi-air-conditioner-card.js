@@ -1565,6 +1565,15 @@ class AcControllerCardV2 extends HTMLElement {
       || this._attrOf(h, id, 'swing_mode')          !== this._attrOf(prev, id, 'swing_mode')
       || this._attrOf(h, id, 'preset_mode')         !== this._attrOf(prev, id, 'preset_mode');
 
+    // Kiểm tra vane entity thay đổi (input_select cho hướng gió)
+    if (!changed) {
+      var _ec = (this._config && this._config.entities && this._config.entities[this._activeIdx]) || {};
+      var _vV = _ec.vane_vertical_entity   || (this._config && this._config.vane_vertical_entity)   || null;
+      var _vH = _ec.vane_horizontal_entity || (this._config && this._config.vane_horizontal_entity) || null;
+      if (_vV && this._stateOf(h, _vV) !== this._stateOf(prev, _vV)) changed = true;
+      if (_vH && this._stateOf(h, _vH) !== this._stateOf(prev, _vH)) changed = true;
+    }
+
     // Kiểm tra thêm badge ON/OFF của tất cả phòng (cho room tabs)
     if (!changed) {
       for (var i = 0; i < ROOMS.length; i++) {
@@ -2011,15 +2020,19 @@ class AcControllerCardV2 extends HTMLElement {
       var slVaneHorizVal = slVaneHorizEntity && this._hass && this._hass.states[slVaneHorizEntity]
         ? this._hass.states[slVaneHorizEntity].state : null;
       // Use configured vane entity, or fallback to swing_mode
-      var slVaneLabel = '';
-      var slHasVane = false;
-      if (slVaneVertEntity || slVaneHorizEntity) {
-        slHasVane = true;
-        // Ưu tiên entity nào có giá trị, nếu cả 2 đều có thì hiện entity đầu tiên được cấu hình
-        slVaneLabel = (slVaneVertEntity ? slVaneVertVal : null) || slVaneHorizVal || 'off';
-      } else if (cfg.show_swing !== false) {
-        slHasVane = true;
-        slVaneLabel = swingMode !== 'off' ? (swingLabels[SWING_LEVELS.indexOf(swingMode)] || swingMode) : swingLabels[0];
+      var climateSwingModes = this._a(room.id, 'swing_modes');
+      var climateHasSwing   = Array.isArray(climateSwingModes) && climateSwingModes.length > 0;
+      var slHasVaneVert     = !!slVaneVertEntity;
+      var slHasVaneHoriz    = !!slVaneHorizEntity;
+      var slVaneSwingFallback = !slHasVaneVert && !slHasVaneHoriz && climateHasSwing && cfg.show_swing !== false;
+      var slShowVaneBtn     = slHasVaneVert || slHasVaneHoriz || slVaneSwingFallback;
+      // Label nút swing fallback
+      var slVaneSwingLabel = '';
+      if (slVaneSwingFallback) {
+        var curSwingIdx = climateSwingModes.indexOf(swingMode);
+        slVaneSwingLabel = swingMode !== 'off'
+          ? (swingLabels[curSwingIdx !== -1 ? curSwingIdx : 0] || swingMode)
+          : swingLabels[0];
       }
       // Inner set-temp ring (same calc as main render)
       var slSetPct    = Math.max(0, Math.min(1, (setTemp - 16) / 16));
@@ -2114,12 +2127,24 @@ class AcControllerCardV2 extends HTMLElement {
         + '  <button class="sl-temp-btn" id="sl-btn-temp-down">&#8722;</button>'
         + '  <span class="sl-temp-set">' + setTemp + '&#176;C</span>'
         + '  <button class="sl-temp-btn" id="sl-btn-temp-up">+</button>'
-        + (slHasVane ? (
+        + (slHasVaneVert ? (
+          '  <button class="sl-extra-btn" id="sl-btn-vane-vert" title="Cánh gió dọc">'
+        + '    <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="var(--accent)" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="17" stroke-linecap="round"/><polyline points="3,5 7,1 11,5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="3,13 7,17 11,13" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        + '    <span class="sl-extra-lbl">' + (slVaneVertVal || '--') + '</span>'
+        + '  </button>'
+        ) : '')
+        + (slHasVaneHoriz ? (
+          '  <button class="sl-extra-btn" id="sl-btn-vane-horiz" title="Cánh gió ngang">'
+        + '    <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="var(--accent)" stroke-width="1.8"><line x1="1" y1="7" x2="17" y2="7" stroke-linecap="round"/><polyline points="5,3 1,7 5,11" stroke-linecap="round" stroke-linejoin="round"/><polyline points="13,3 17,7 13,11" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        + '    <span class="sl-extra-lbl">' + (slVaneHorizVal || '--') + '</span>'
+        + '  </button>'
+        ) : '')
+        + (slVaneSwingFallback ? (
           '  <button class="sl-extra-btn" id="sl-btn-vane" title="' + tr.swingLabel + '">'
         + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M2 8 Q8 4 12 8 Q16 12 22 8"/><path d="M2 16 Q8 12 12 16 Q16 20 22 16"/></svg>'
-        + '    <span class="sl-extra-lbl">' + slVaneLabel + '</span>'
+        + '    <span class="sl-extra-lbl">' + slVaneSwingLabel + '</span>'
         + '  </button>'
-        ) : '<div style="min-width:60px"></div>')
+        ) : (!slHasVaneVert && !slHasVaneHoriz ? '<div style="min-width:60px"></div>' : ''))
         + '</div>'
 
         // ── Bottom controls: mode dropdown (30%) + room dropdown (70%)
@@ -2608,50 +2633,213 @@ class AcControllerCardV2 extends HTMLElement {
       self._call('climate','set_temperature',{entity_id:id, temperature: Math.max(16, parseFloat(self._a(id,'temperature')||24)-1)});
     });
 
-    // Fan speed cycle (super lite)
+    // ── Generic popup helper ─────────────────────────────────────────────────
+    function openSlPopup(opts) {
+      var popupId   = opts.popupId || 'sl-generic-popup';
+      var overlayId = popupId + '-ov';
+      var isWave    = (self._config && self._config.popup_style) === 'wave';
+      var isEffect  = (self._config && self._config.popup_style) === 'effect';
+
+      var existPop = document.getElementById(popupId);
+      if (existPop) {
+        existPop.remove();
+        var existOv = document.getElementById(overlayId);
+        if (existOv) existOv.remove();
+        return;
+      }
+
+      ['sl-fan-popup','sl-fan-popup-ov',
+       'sl-vane-vert-popup','sl-vane-vert-popup-ov',
+       'sl-vane-horiz-popup','sl-vane-horiz-popup-ov',
+       'sl-vane-swing-popup','sl-vane-swing-popup-ov',
+       'sl-mode-overlay-global','sl-room-overlay-global'
+      ].forEach(function(id2) { var el = document.getElementById(id2); if (el) el.remove(); });
+
+      _slInjectStyles(isWave);
+
+      var overlay = document.createElement('div');
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9990;background:transparent';
+      document.body.appendChild(overlay);
+
+      var pop = document.createElement('div');
+      pop.id  = popupId;
+      pop.style.cssText = [
+        'position:fixed','z-index:9999',
+        'background:rgba(8,20,48,0.55)',
+        'border:1px solid rgba(255,255,255,0.20)',
+        'border-top:1px solid rgba(255,255,255,0.35)',
+        'border-radius:22px',
+        'backdrop-filter:blur(48px) saturate(2) brightness(1.1)',
+        '-webkit-backdrop-filter:blur(48px) saturate(2) brightness(1.1)',
+        'box-shadow:0 2px 0 rgba(255,255,255,0.15) inset,0 24px 64px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.06)',
+        'overflow:hidden','padding:8px','min-width:180px',
+        'font-family:Sora,sans-serif',
+        'transform-origin:' + (isWave ? 'bottom center' : 'top center'),
+        isWave
+          ? 'animation:slWaveSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) both'
+          : 'animation:slBubblePop 0.45s cubic-bezier(0.22,1,0.36,1) both'
+      ].join(';');
+
+      var html = '';
+      if (!isWave) {
+        html += '<div class="sl-pop-shimmer"></div>'
+              + '<div class="sl-spark sl-spark-tl"></div><div class="sl-spark sl-spark-tr"></div>'
+              + '<div class="sl-spark sl-spark-bl"></div><div class="sl-spark sl-spark-br"></div>';
+      }
+      if (opts.title) {
+        html += '<div style="font-size:9px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;'
+              + 'color:rgba(255,255,255,0.38);padding:6px 14px 2px;pointer-events:none">'
+              + opts.title + '</div>';
+      }
+      opts.items.forEach(function(item, mi) {
+        var delay = (mi * 0.04 + 0.03).toFixed(2) + 's';
+        if (isWave) {
+          html += '<div class="sl-ri sl-ri-wave' + (item.active ? ' active' : '') + '"'
+                + ' data-popup-val="' + item.val + '" style="animation-delay:' + delay + '">'
+                + (item.icon ? '<span style="font-size:17px;line-height:1;width:24px;text-align:center;flex-shrink:0">' + item.icon + '</span>' : '')
+                + '<span style="flex:1">' + item.label + '</span>'
+                + (item.active ? '<span style="color:rgba(52,211,153,0.95);font-size:14px;flex-shrink:0">✓</span>' : '')
+                + '<div class="sl-wave-ripple"></div></div>';
+        } else {
+          html += '<div class="sl-ri' + (item.active ? ' active' : '') + '"'
+                + ' data-popup-val="' + item.val + '" style="animation-delay:' + delay + '">'
+                + (item.icon ? '<span style="font-size:17px;line-height:1;width:24px;text-align:center;flex-shrink:0">' + item.icon + '</span>' : '')
+                + '<span style="flex:1">' + item.label + '</span>'
+                + (item.active ? '<span style="color:rgba(52,211,153,0.95);font-size:14px;flex-shrink:0">✓</span>' : '')
+                + '</div>';
+        }
+      });
+      pop.innerHTML = html;
+
+      var anchor = r.getElementById(opts.anchorId);
+      var bRect  = anchor ? anchor.getBoundingClientRect() : { bottom: 200, left: 20, width: 60, top: 200 };
+      var popW   = Math.max(bRect.width + 60, 190);
+      var popL   = bRect.left + bRect.width / 2 - popW / 2;
+      if (popL + popW > window.innerWidth - 8) popL = window.innerWidth - popW - 8;
+      if (popL < 8) popL = 8;
+
+      if (isWave) {
+        pop.style.bottom = (window.innerHeight - bRect.top + 6) + 'px';
+        pop.style.top    = 'auto';
+      } else {
+        pop.style.top = (bRect.bottom + 6) + 'px';
+      }
+      pop.style.left  = popL + 'px';
+      pop.style.width = popW + 'px';
+      document.body.appendChild(pop);
+
+      function closeThis() {
+        var p2 = document.getElementById(popupId);   if (p2) p2.remove();
+        var o2 = document.getElementById(overlayId); if (o2) o2.remove();
+      }
+
+      pop.querySelectorAll('[data-popup-val]').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (isWave) _slWaveRipple(item, e);
+          var val = item.dataset.popupVal;
+          var doAction = function() { opts.onSelect(val); closeThis(); };
+          isWave ? setTimeout(doAction, 200) : doAction();
+        });
+      });
+
+      overlay.addEventListener('click', closeThis);
+    }
+
+    // ── Fan speed — popup ─────────────────────────────────────────────────
     onTapSL(r.getElementById('sl-btn-fan'), function() {
-      var id = ROOMS[self._activeIdx].id;
-      var cur = self._a(id,'fan_mode') || 'auto';
-      var supported = self._a(id,'fan_modes');
-      var levels = (Array.isArray(supported) && supported.length > 0) ? supported : FAN_LEVELS;
-      var idx = levels.indexOf(cur);
-      var next = levels[(idx + 1) % levels.length];
-      self._call('climate','set_fan_mode',{entity_id:id, fan_mode:next});
+      var id        = ROOMS[self._activeIdx].id;
+      var curFan    = self._a(id, 'fan_mode') || 'auto';
+      var supported = self._a(id, 'fan_modes');
+      var levels    = (Array.isArray(supported) && supported.length > 0) ? supported : FAN_LEVELS;
+      var lang2     = (self._config && self._config.language) || 'vi';
+      var tr2       = AC_TRANSLATIONS[lang2] || AC_TRANSLATIONS.vi;
+      var fanTr     = tr2.fans || ['Auto','Low','Medium','High'];
+      var fanLblMap = {};
+      for (var fi2 = 0; fi2 < FAN_LEVELS.length; fi2++) fanLblMap[FAN_LEVELS[fi2]] = fanTr[fi2] || FAN_LEVELS[fi2];
+      for (var fi3 = 0; fi3 < levels.length; fi3++) {
+        if (!fanLblMap[levels[fi3]]) fanLblMap[levels[fi3]] = levels[fi3].charAt(0).toUpperCase() + levels[fi3].slice(1);
+      }
+      var fanIcons = { auto:'🌀', low:'🍃', medium:'💨', high:'🌪', turbo:'⚡', quiet:'🤫', mid:'💨', 'mid-high':'💨', 'mid-low':'🍃', min:'🍃', max:'🌪' };
+      openSlPopup({
+        anchorId: 'sl-btn-fan',
+        title:    tr2.fanLabel || 'Fan Speed',
+        items:    levels.map(function(lv) {
+          return { val: lv, label: fanLblMap[lv] || lv, icon: fanIcons[lv] || '💨', active: lv === curFan };
+        }),
+        popupId:  'sl-fan-popup',
+        onSelect: function(val) {
+          self._call('climate', 'set_fan_mode', { entity_id: id, fan_mode: val });
+        }
+      });
     });
 
-    // Vane cycle (super lite) — supports custom vane entities or fallback to swing_mode
-    onTapSL(r.getElementById('sl-btn-vane'), function() {
-      var id = ROOMS[self._activeIdx].id;
-      var cfg2 = self._config || {};
+    // ── Vane DỌC — popup options input_select ────────────────────────────
+    onTapSL(r.getElementById('sl-btn-vane-vert'), function() {
+      var cfg2    = self._config || {};
       var roomCfg = (cfg2.entities && cfg2.entities[self._activeIdx]) || {};
-      var vaneVertEntity = roomCfg.vane_vertical_entity || cfg2.vane_vertical_entity || null;
-      var vaneHorizEntity = roomCfg.vane_horizontal_entity || cfg2.vane_horizontal_entity || null;
-      if (vaneVertEntity && self._hass && self._hass.states[vaneVertEntity]) {
-        // Cycle through input_select options
-        var vaneState = self._hass.states[vaneVertEntity];
-        var options = vaneState.attributes.options || [];
-        if (options.length > 0) {
-          var curIdx = options.indexOf(vaneState.state);
-          var nextOpt = options[(curIdx + 1) % options.length];
-          self._call('input_select','select_option',{entity_id:vaneVertEntity, option:nextOpt});
+      var entId   = roomCfg.vane_vertical_entity || cfg2.vane_vertical_entity || null;
+      if (!entId || !self._hass || !self._hass.states[entId]) return;
+      var vs   = self._hass.states[entId];
+      var vOpts = (vs.attributes && vs.attributes.options) || [];
+      if (vOpts.length === 0) return;
+      var cur  = vs.state;
+      openSlPopup({
+        anchorId: 'sl-btn-vane-vert',
+        title:    '↕ Cánh gió dọc',
+        items:    vOpts.map(function(o) { return { val: o, label: o, active: o === cur }; }),
+        popupId:  'sl-vane-vert-popup',
+        onSelect: function(val) {
+          self._call('input_select', 'select_option', { entity_id: entId, option: val });
         }
-      } else if (vaneHorizEntity && self._hass && self._hass.states[vaneHorizEntity]) {
-        var vaneState2 = self._hass.states[vaneHorizEntity];
-        var options2 = vaneState2.attributes.options || [];
-        if (options2.length > 0) {
-          var curIdx2 = options2.indexOf(vaneState2.state);
-          var nextOpt2 = options2[(curIdx2 + 1) % options2.length];
-          self._call('input_select','select_option',{entity_id:vaneHorizEntity, option:nextOpt2});
+      });
+    });
+
+    // ── Vane NGANG — popup options input_select ──────────────────────────
+    onTapSL(r.getElementById('sl-btn-vane-horiz'), function() {
+      var cfg2    = self._config || {};
+      var roomCfg = (cfg2.entities && cfg2.entities[self._activeIdx]) || {};
+      var entId   = roomCfg.vane_horizontal_entity || cfg2.vane_horizontal_entity || null;
+      if (!entId || !self._hass || !self._hass.states[entId]) return;
+      var vs   = self._hass.states[entId];
+      var hOpts = (vs.attributes && vs.attributes.options) || [];
+      if (hOpts.length === 0) return;
+      var cur  = vs.state;
+      openSlPopup({
+        anchorId: 'sl-btn-vane-horiz',
+        title:    '↔ Cánh gió ngang',
+        items:    hOpts.map(function(o) { return { val: o, label: o, active: o === cur }; }),
+        popupId:  'sl-vane-horiz-popup',
+        onSelect: function(val) {
+          self._call('input_select', 'select_option', { entity_id: entId, option: val });
         }
-      } else {
-        // Fallback: cycle swing_mode
-        var cur = self._a(id,'swing_mode') || 'off';
-        var supported = self._a(id,'swing_modes');
-        var levels = (Array.isArray(supported) && supported.length > 0) ? supported : SWING_LEVELS;
-        var idx = levels.indexOf(cur);
-        var next = levels[(idx + 1) % levels.length];
-        self._call('climate','set_swing_mode',{entity_id:id, swing_mode:next});
-      }
+      });
+    });
+
+    // ── Swing fallback — popup swing_modes climate ───────────────────────
+    onTapSL(r.getElementById('sl-btn-vane'), function() {
+      var id        = ROOMS[self._activeIdx].id;
+      var supported = self._a(id, 'swing_modes');
+      if (!Array.isArray(supported) || supported.length === 0) return;
+      var cur       = self._a(id, 'swing_mode') || 'off';
+      var lang2     = (self._config && self._config.language) || 'vi';
+      var tr2       = AC_TRANSLATIONS[lang2] || AC_TRANSLATIONS.vi;
+      var swingTr   = tr2.swings || ['Fixed','Up/Down','Left/Right','Both'];
+      var swingLblMap = {};
+      for (var si2 = 0; si2 < SWING_LEVELS.length; si2++) swingLblMap[SWING_LEVELS[si2]] = swingTr[si2] || SWING_LEVELS[si2];
+      var swingIcons = { off:'⚓', vertical:'↕', horizontal:'↔', both:'✛' };
+      openSlPopup({
+        anchorId: 'sl-btn-vane',
+        title:    tr2.swingLabel || 'Airflow',
+        items:    supported.map(function(m) {
+          return { val: m, label: swingLblMap[m] || m, icon: swingIcons[m] || '💨', active: m === cur };
+        }),
+        popupId:  'sl-vane-swing-popup',
+        onSelect: function(val) {
+          self._call('climate', 'set_swing_mode', { entity_id: id, swing_mode: val });
+        }
+      });
     });
 
     // Gear → more-info
@@ -3330,11 +3518,27 @@ class MultiAcCardEditor extends HTMLElement {
     }));
   }
 
+  // ── Đảm bảo ha-entity-picker đã được load (lazy component của HA) ─────────
+  async _ensureEntityPicker() {
+    if (customElements.get('ha-entity-picker')) return;
+    try {
+      const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : Promise.resolve());
+      if (helpers) {
+        const el = await helpers.createCardElement({ type: 'entities', entities: [] });
+        if (el) el.hass = this._hass;
+      }
+    } catch (_) { /* ignore */ }
+    try { await customElements.whenDefined('ha-entity-picker'); } catch (_) { /* ignore */ }
+  }
+
   // ── Inject hass vào mọi ha-entity-picker ───────────────────────────────────
   _syncPickers() {
     if (!this._hass || !this.shadowRoot) return;
     const ents = this._config.entities || [];
     const apply = () => {
+      this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(p => {
+        p.hass = this._hass;
+      });
       // Global sensor entity pickers (data-key)
       this.shadowRoot.querySelectorAll('ha-entity-picker[data-key]').forEach(p => {
         p.hass = this._hass;
@@ -3386,8 +3590,16 @@ class MultiAcCardEditor extends HTMLElement {
         if (p.value !== saved) { p.value = saved; p.setAttribute('value', saved); }
       });
     };
-    apply();
-    requestAnimationFrame(() => requestAnimationFrame(apply));
+    // Đảm bảo ha-entity-picker đã load trước khi sync
+    if (!customElements.get('ha-entity-picker')) {
+      this._ensureEntityPicker().then(() => {
+        apply();
+        requestAnimationFrame(() => requestAnimationFrame(apply));
+      });
+    } else {
+      apply();
+      requestAnimationFrame(() => requestAnimationFrame(apply));
+    }
   }
 
   // ── Toggle accordion mà không full re-render (giữ picker state) ────────────
@@ -3781,6 +3993,13 @@ class MultiAcCardEditor extends HTMLElement {
 
     this._bindEvents();
     this._syncPickers();
+    // Nếu ha-entity-picker chưa defined, đợi load xong rồi rebind events + sync
+    if (!customElements.get('ha-entity-picker')) {
+      this._ensureEntityPicker().then(() => {
+        this._bindEvents();
+        this._syncPickers();
+      });
+    }
   }
 
   _bindEvents() {
